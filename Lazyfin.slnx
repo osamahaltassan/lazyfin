@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jellyfin.Plugin.Lazyfin.Tests/Jellyfin.Plugin.Lazyfin.Tests.csproj" />
+  </Folder>
+  <Project Path="Jellyfin.Plugin.Lazyfin/Jellyfin.Plugin.Lazyfin.csproj" />
+</Solution>

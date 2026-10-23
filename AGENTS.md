@@ -32,6 +32,10 @@ The agent uses the review standards in `CODING_STANDARDS.md` when the project ha
 
 When the user asks the agent to use the browser, it uses the built-in browser of its harness, unless the user EXPLICITLY says otherwise.
 
+## Dependency Age
+
+Every package, SDK, tool, GitHub Action, and Jellyfin build the agent pulls was released at least 7 days earlier. The agent checks the release date before it adds, installs, or bumps one, and picks the newest version that passes. Dependabot enforces the same 7-day cooldown.
+
 ## Docker
 
 Docker on this machine is for testing only, and the disk is nearly full.
@@ -55,6 +59,8 @@ When the agent thinks the reason in a `Why:` comment no longer holds, it explain
 ## Planning and Operations
 
 Before the agent implements a plan, it reads `docs/agents/feature-build.md` when the project has one.
+
+Before the agent builds, tests, or releases Lazyfin, adds an enhancement, or adds a dependency, it reads `docs/development.md`.
 
 ## Changelog
 
