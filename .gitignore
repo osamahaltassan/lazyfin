@@ -5,3 +5,9 @@
 plan.md
 refactor-report.md
 report.md
+
+# .NET
+bin/
+obj/
+artifacts/
+*.user

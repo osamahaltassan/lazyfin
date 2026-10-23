@@ -1,0 +1,73 @@
+name: Release
+
+# Publishing a GitHub Release tagged vX.Y.Z builds the plugin zip, attaches it to the release,
+# and adds that version to the plugin repository manifest on the gh-pages branch.
+# A prerelease is built and attached, but stays out of the manifest.
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Read version from tag
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "Release tag must look like v1.2.3, got $TAG" >&2
+            exit 1
+          fi
+          echo "VERSION=${BASH_REMATCH[1]}.0" >> "$GITHUB_ENV"
+          echo "EXCLUDE_NEWER=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Check dependency age
+        run: python3 scripts/check-dependency-age.py
+
+      - name: Test
+        run: dotnet test Lazyfin.slnx --configuration Release
+
+      - name: Build plugin zip
+        run: |
+          uvx --exclude-newer "$EXCLUDE_NEWER" jprm==1.1.0 --verbosity=debug \
+            plugin build . --output artifacts --version "$VERSION" --dotnet-framework net10.0
+
+      - name: Attach zip to release
+        run: gh release upload "$TAG" "artifacts/lazyfin_${VERSION}.zip" --clobber
+
+      - name: Add version to manifest
+        if: ${{ !github.event.release.prerelease }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin gh-pages; then
+            git worktree add pages origin/gh-pages
+            git -C pages switch -c gh-pages
+          else
+            git worktree add --orphan -b gh-pages pages
+            uvx --exclude-newer "$EXCLUDE_NEWER" jprm==1.1.0 repo init pages
+          fi
+          uvx --exclude-newer "$EXCLUDE_NEWER" jprm==1.1.0 repo add pages "artifacts/lazyfin_${VERSION}.zip" \
+            --plugin-url "https://github.com/${{ github.repository }}/releases/download/${TAG}/lazyfin_${VERSION}.zip"
+          git -C pages add manifest.json
+          git -C pages commit -m "Add Lazyfin ${VERSION} to manifest"
+          git -C pages push origin gh-pages
