@@ -32,6 +32,16 @@ The agent uses the review standards in `CODING_STANDARDS.md` when the project ha
 
 When the user asks the agent to use the browser, it uses the built-in browser of its harness, unless the user EXPLICITLY says otherwise.
 
+## Related Repos
+
+- `~/git/jellyfin`: Jellyfin server
+- `~/git/jellyfin-web`: Jellyfin Web
+- `~/git/jellyfin-ios`: the official iPhone and iPad app
+- `~/git/mpv`: the reference player for the RTL fix
+- `~/git/subtitleedit`: Subtitle Edit, whose `libse` Jellyfin uses for text subtitles
+
+The clones follow their default branch, ahead of the stable Jellyfin release that Lazyfin targets.
+
 ## Dependency Age
 
 Every package, SDK, tool, GitHub Action, and Jellyfin build the agent pulls was released at least 7 days earlier. The agent checks the release date before it adds, installs, or bumps one, and picks the newest version that passes. Dependabot enforces the same 7-day cooldown.
