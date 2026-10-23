@@ -42,6 +42,10 @@ _Avoid_: Hardsub, encoding subtitles
 A subtitle track stored as text, such as SRT, VTT, or ASS, which the RTL fix can change.
 _Avoid_: Soft sub
 
+**RTL line**:
+A subtitle line whose first letter belongs to a right-to-left script, such as Arabic or Hebrew. The RTL fix lays out each RTL line right to left.
+_Avoid_: Arabic line, RTL text
+
 **Image subtitle**:
 A subtitle track stored as pictures, such as PGS, which the RTL fix cannot change.
 _Avoid_: Bitmap sub, graphic sub
