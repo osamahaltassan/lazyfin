@@ -4,13 +4,13 @@ The agent reads the root `GLOSSARY.md` and uses its domain language.
 
 ## Issue Tracking
 
-Before creating, finding, reading, or updating issues and specs, the agent reads `docs/agents/issue-tracker.md`. This repository tracks them in GitHub, at `osamahaltassan/lazyfin`.
+Before creating, finding, reading, or updating issues and specs, the agent reads `docs/agents/issue-tracker.md`. This repository tracks them in Kaneo.
 
-Before the agent triages or relabels an issue, it reads `docs/agents/triage-labels.md`. The repo uses the five default triage labels, each named after its role.
+The agent uses the `kaneo` CLI, already logged in to `~/.agents/kaneo-url.md` on this machine, for every Kaneo operation.
 
-Before the agent explores the codebase for a skill, it reads `docs/agents/domain.md`. The repo is single-context: one root `GLOSSARY.md` and ADRs in `docs/adr/`.
+The order of the `To do` column on the Kaneo board is the repo's queue.
 
-The pinned `Order of work` issue is the repo's build queue. After the agent opens, closes, or reorders any issue, it updates `Order of work` in the same operation, following the Order of work section of `docs/agents/issue-tracker.md`. When the repo has no pinned `Order of work` issue, the agent creates and pins it before its first issue change.
+The agent uses the `gh` CLI, already logged in on this machine, for pull requests and every other GitHub operation.
 
 ## Agent Instructions
 
@@ -51,6 +51,10 @@ Every package, SDK, tool, GitHub Action, and Jellyfin build the agent pulls was 
 Docker on this machine is for testing only, and the disk is nearly full.
 
 When the agent finishes a task that used Docker, it removes every container, image, volume, network, and build cache, then runs `docker system df` to confirm none of them remain.
+
+## The Server
+
+The agent uses `server-1` within the instructions listed in `~/.agents/server-1.md`.
 
 ## Code Documentation
 
