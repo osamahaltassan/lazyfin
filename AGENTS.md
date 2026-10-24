@@ -56,6 +56,8 @@ When the agent finishes a task that used Docker, it removes every container, ima
 
 The agent uses `server-1` within the instructions listed in `~/.agents/server-1.md`.
 
+Server details, hostnames, and other private infrastructure may appear in Kaneo tasks, but never in anything public on GitHub, such as files, commits, branches, pull requests, or releases. There, the agent refers to them only through a pointer like the one above.
+
 ## Code Documentation
 
 Code Documentation explains how code is USED. Code Comments explain how code WORKS.
