@@ -1,6 +1,6 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's GitHub tracker.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's Kaneo project.
 
 | Label in mattpocock/skills | Label in our tracker | Meaning                                  |
 | -------------------------- | -------------------- | ---------------------------------------- |
@@ -12,6 +12,6 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
-When a label in the right-hand column is missing from GitHub, create it with `gh label create <label> --description "<Meaning>"`, using the Meaning column as its description.
+When a label in the right-hand column is missing from the Kaneo workspace, create it with `kaneo label create <label>`. Kaneo labels have no description, so this table is where each meaning lives.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
