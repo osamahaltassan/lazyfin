@@ -20,8 +20,9 @@ namespace Jellyfin.Plugin.Lazyfin.Enhancements.RtlFix;
 /// <remarks>
 /// <para>
 /// <see cref="GetSubtitles"/> fixes the output only when the source stream is a text subtitle that is not ASS or SSA,
-/// and the output is JSON or SRT. Every other subtitle comes back as the server wrote it. So does one the fix cannot
-/// read, such as one in a legacy encoding, so the fix never stops a subtitle from loading.
+/// and the output is JSON, SRT, WebVTT, or TTML. HLS subtitle segments are WebVTT, so they are fixed too. Every other
+/// subtitle comes back as the server wrote it. So does one the fix cannot read, such as one in a legacy encoding, so
+/// the fix never stops a subtitle from loading.
 /// </para>
 /// <para>
 /// The other members pass straight through. <see cref="GetSubtitleFilePath"/> must, because burn-in of embedded
@@ -91,6 +92,8 @@ internal sealed class RtlFixSubtitleEncoder : ISubtitleEncoder
     {
         "json" => SubtitleTextFormat.Json,
         SubtitleFormat.SRT or SubtitleFormat.SUBRIP => SubtitleTextFormat.SubRip,
+        SubtitleFormat.VTT or SubtitleFormat.WEBVTT => SubtitleTextFormat.WebVtt,
+        SubtitleFormat.TTML => SubtitleTextFormat.Ttml,
         _ => null,
     };
 

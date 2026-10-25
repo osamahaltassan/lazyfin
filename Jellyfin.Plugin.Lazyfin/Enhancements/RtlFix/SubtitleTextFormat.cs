@@ -27,4 +27,14 @@ public enum SubtitleTextFormat
     /// SubStation Alpha. The rule leaves it as authored.
     /// </summary>
     Ssa,
+
+    /// <summary>
+    /// WebVTT: a <c>WEBVTT</c> header, then blocks, where a cue's lines follow its timing line, up to an empty line.
+    /// </summary>
+    WebVtt,
+
+    /// <summary>
+    /// TTML, or Timed Text: XML whose cues are <c>&lt;p&gt;</c> elements, with their lines split by <c>&lt;br /&gt;</c>.
+    /// </summary>
+    Ttml,
 }
