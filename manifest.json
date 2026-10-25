@@ -1,0 +1,22 @@
+[
+    {
+        "guid": "e8fe2245-b033-4a98-9d02-f035bd7044bf",
+        "name": "Lazyfin",
+        "description": "Lazyfin is one plugin that fixes parts of Jellyfin's user experience. Every enhancement is on as soon as Lazyfin is installed, with nothing to configure.\n",
+        "overview": "Fixes Jellyfin's user experience, so nobody has to configure it",
+        "owner": "osamahaltassan",
+        "category": "General",
+        "versions": [
+            {
+                "version": "0.1.1.0",
+                "changelog": "See https://github.com/osamahaltassan/lazyfin/blob/main/CHANGELOG.md\n",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/osamahaltassan/lazyfin/releases/download/v0.1.1/lazyfin_0.1.1.0.zip",
+                "checksum": "cb1c5c9a13768c6f02768235fb75dce7",
+                "timestamp": "2026-10-25T10:33:39Z"
+            }
+        ],
+        "image": "lazyfin-512.png",
+        "imageUrl": "https://osamahaltassan.github.io/lazyfin/lazyfin/lazyfin-512.png"
+    }
+]
