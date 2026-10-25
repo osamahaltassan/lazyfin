@@ -1,0 +1,7 @@
+1
+00:00:01,000 --> 00:00:04,500
+We reached the city in the morning.
+
+2
+00:00:05,500 --> 00:00:09,000
+This line sits at the bottom.
