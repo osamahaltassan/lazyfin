@@ -57,7 +57,7 @@ Every package, SDK, Action, and server build must have been released at least 7 
 
 - `scripts/check-dependency-age.py` checks every NuGet package in the lock files, transitive ones included. CI runs it on every push.
 - Dependabot opens bumps only after the same 7-day cooldown.
-- The release workflow runs `jprm` with `uvx --exclude-newer`, so its Python packages follow the rule too.
+- `scripts/jprm.sh` runs `jprm` with `uvx --exclude-newer`, so its Python packages follow the rule too.
 
 Lazyfin references `Jellyfin.Controller` and `Jellyfin.Model` 12.0.0, the oldest 12.x release. Jellyfin loads a plugin only on servers at or above its `targetAbi`, so building against 12.0.0 is what lets Lazyfin load on every 12.x server. `targetAbi` in `build.yaml` must equal that version, and a test checks it. Dependabot skips Jellyfin packages, because raising them drops support for older servers.
 
@@ -68,3 +68,5 @@ Lazyfin references `Jellyfin.Controller` and `Jellyfin.Model` 12.0.0, the oldest
 3. On the first release only, once the `Release` workflow has created the `gh-pages` branch, turn on GitHub Pages for the root of `gh-pages`, so the repository URL in `README.md` works. GitHub refuses to turn on Pages for a branch that does not exist yet.
 
 The `Release` workflow tests and builds `lazyfin_X.Y.Z.0.zip`, attaches it to the release, and adds that version to `manifest.json` on the `gh-pages` branch, creating the branch on the first release. `jprm` packs the icon named by `image` in `build.yaml` into the zip and publishes it on `gh-pages` beside the manifest, so the catalog can show it. A prerelease gets its zip but stays out of the manifest.
+
+CI builds the plugin zip through `scripts/jprm.sh` on every push, the same way the `Release` workflow does, so a broken release build fails before a tag is published.

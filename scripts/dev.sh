@@ -274,18 +274,19 @@ cmd_install() {
 cmd_release() {
     local work="$REPO/.temp/release" version="0.0.1.0"
     rm -rf "$work"
-    mkdir -p "$work/source" "$work/artifacts" "$work/pages"
+    mkdir -p "$work/source" "$work/pages"
     rsync -a --exclude .git --exclude .temp --exclude bin --exclude obj "$REPO/" "$work/source/"
 
-    local exclude_newer
-    exclude_newer="$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)"
-    (cd "$work/source" && uvx --exclude-newer "$exclude_newer" jprm==1.1.0 \
-        plugin build . --output "$work/artifacts" --version "$version" --dotnet-framework net10.0 >/dev/null)
-    uvx --exclude-newer "$exclude_newer" jprm==1.1.0 repo init "$work/pages" >/dev/null
-    uvx --exclude-newer "$exclude_newer" jprm==1.1.0 repo add "$work/pages" "$work/artifacts/lazyfin_$version.zip" \
+    local jprm="$work/source/scripts/jprm.sh" zip
+    if ! zip="$("$jprm" zip "$version" "$work/artifacts" 2>"$work/build.log")"; then
+        log "Could not build the release zip. See $work/build.log."
+        return 1
+    fi
+    "$jprm" repo init "$work/pages" >/dev/null
+    "$jprm" repo add "$work/pages" "$zip" \
         --url "http://127.0.0.1:$REPO_PORT" \
         --plugin-url "http://127.0.0.1:$REPO_PORT/lazyfin_$version.zip" >/dev/null
-    cp "$work/artifacts/lazyfin_$version.zip" "$work/pages/"
+    cp "$zip" "$work/pages/"
 
     python3 -I -m http.server "$REPO_PORT" --bind 127.0.0.1 --directory "$work/pages" >/dev/null 2>&1 &
     local http_pid=$!

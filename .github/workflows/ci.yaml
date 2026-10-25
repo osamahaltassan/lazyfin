@@ -20,6 +20,8 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
       - name: Check dependency age
         run: python3 scripts/check-dependency-age.py
 
@@ -28,3 +30,6 @@ jobs:
 
       - name: Test
         run: dotnet test Lazyfin.slnx --configuration Release --no-build
+
+      - name: Build plugin zip
+        run: scripts/jprm.sh zip 0.0.0.0 artifacts
