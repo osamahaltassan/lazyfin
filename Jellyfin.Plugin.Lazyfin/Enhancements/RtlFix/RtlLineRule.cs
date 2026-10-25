@@ -35,7 +35,8 @@ public static class RtlLineRule
     /// <item>RLE goes right after the markup a line starts with, and PDF right before the markup it ends with, so
     /// <c>{\an8}&lt;i&gt;مرحبا.&lt;/i&gt;</c> becomes <c>{\an8}&lt;i&gt;</c> RLE <c>مرحبا.</c> PDF <c>&lt;/i&gt;</c>.</item>
     /// <item>Lines whose first strong letter is left to right, lines with no strong letter, and everything that is
-    /// not a line, such as SRT timings, stay byte for byte the same.</item>
+    /// not a line, such as SRT timings, WebVTT headers and <c>NOTE</c> blocks, or TTML's <c>&lt;head&gt;</c>, stay
+    /// byte for byte the same.</item>
     /// <item>Each line keeps the break it had, whether <c>\r\n</c>, <c>\n</c>, or a lone <c>\r</c>, and a byte order
     /// mark at the start is kept.</item>
     /// <item>A line already wrapped is left alone, so applying the rule twice changes nothing.</item>
@@ -57,7 +58,8 @@ public static class RtlLineRule
         var fixedBody = format switch
         {
             SubtitleTextFormat.Json => FixJson(body),
-            SubtitleTextFormat.SubRip => FixSubRip(body),
+            SubtitleTextFormat.SubRip or SubtitleTextFormat.WebVtt => FixCues(body, format),
+            SubtitleTextFormat.Ttml => TtmlLines.Map(body, line => RtlLine.Wrap(line, SubtitleTextFormat.Ttml)),
             SubtitleTextFormat.Ass or SubtitleTextFormat.Ssa => body,
             _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown subtitle text format."),
         };
@@ -71,12 +73,17 @@ public static class RtlLineRule
     }
 
     /// <summary>
-    /// Wraps the RTL lines of SRT cues: every line after a timing line, up to the blank line that ends the cue.
+    /// Wraps the RTL lines of SRT or WebVTT cues: every line after a timing line, up to the blank line that ends the cue.
     /// </summary>
-    private static string FixSubRip(string srt)
+    /// <remarks>
+    /// A WebVTT header and its <c>NOTE</c>, <c>STYLE</c>, and <c>REGION</c> blocks never hold a timing line, so they
+    /// are never touched, and neither are cue identifiers, which come before it. A timing line that follows a cue with
+    /// no blank line between them is read as a cue line, but it never starts right to left, so it stays the same too.
+    /// </remarks>
+    private static string FixCues(string text, SubtitleTextFormat format)
     {
         bool inCue = false;
-        return TextLines.Map(srt, line =>
+        return TextLines.Map(text, line =>
         {
             if (inCue && string.IsNullOrWhiteSpace(line))
             {
@@ -84,7 +91,7 @@ public static class RtlLineRule
             }
             else if (inCue)
             {
-                return RtlLine.Wrap(line);
+                return RtlLine.Wrap(line, format);
             }
             else if (line.Contains("-->", StringComparison.Ordinal))
             {
@@ -125,7 +132,7 @@ public static class RtlLineRule
         {
             if (trackEvent is JsonObject cue && cue["Text"] is JsonValue value && value.TryGetValue<string>(out var cueText))
             {
-                var fixedText = TextLines.Map(cueText, RtlLine.Wrap);
+                var fixedText = TextLines.Map(cueText, line => RtlLine.Wrap(line, SubtitleTextFormat.Json));
                 if (!ReferenceEquals(fixedText, cueText))
                 {
                     cue["Text"] = fixedText;

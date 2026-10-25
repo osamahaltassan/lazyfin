@@ -47,11 +47,17 @@ public class AddRtlFixTests
     private const string WrappedArabicJson =
         """{"TrackEvents":[{"Id":"1","Text":"\u003Ci\u003E\u202B\u0645\u0631\u062D\u0628\u0627.\u202C\u003C/i\u003E\n\u202B\u0643\u064A\u0641 \u062D\u0627\u0644\u0643\u061F\u202C","StartPositionTicks":10000000,"EndPositionTicks":30000000}]}""";
 
-    private const string ArabicVtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<i>مرحبا.</i>\nكيف حالك؟\n\n";
+    private const string ArabicVtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<i>مرحبا.</i>\nكيف حالك؟";
+
+    private const string WrappedArabicVtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<i>\u202Bمرحبا.\u202C</i>\n\u202Bكيف حالك؟\u202C";
 
     private const string ArabicTtml =
-        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<tt xmlns=\"http://www.w3.org/ns/ttml\">\r\n  <body>\r\n    <div>\r\n"
-        + "      <p begin=\"00:00:01.000\" end=\"00:00:03.000\">مرحبا.<br />كيف حالك؟</p>\r\n    </div>\r\n  </body>\r\n</tt>";
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<tt xmlns=\"http://www.w3.org/ns/ttml\">\n  <body>\n    <div>\n"
+        + "      <p begin=\"1.0s\" xml:id=\"p0\" end=\"3.0s\">مرحبا.<br />كيف حالك؟</p>\n    </div>\n  </body>\n</tt>";
+
+    private const string WrappedArabicTtml =
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<tt xmlns=\"http://www.w3.org/ns/ttml\">\n  <body>\n    <div>\n"
+        + "      <p begin=\"1.0s\" xml:id=\"p0\" end=\"3.0s\">\u202Bمرحبا.\u202C<br />\u202Bكيف حالك؟\u202C</p>\n    </div>\n  </body>\n</tt>";
 
     private const string ArabicAss =
         "[Events]\r\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\r\n"
@@ -89,15 +95,38 @@ public class AddRtlFixTests
     }
 
     [Theory]
-    [InlineData("vtt", ArabicVtt)]
-    [InlineData("webvtt", ArabicVtt)]
-    [InlineData("ttml", ArabicTtml)]
-    [InlineData("ass", ArabicAss)]
-    [InlineData("ssa", ArabicAss)]
-    public async Task OutputFormatNotFixedYet_ComesBackUnchanged(string format, string output)
+    [InlineData("vtt", ArabicVtt, WrappedArabicVtt)]
+    [InlineData("webvtt", ArabicVtt, WrappedArabicVtt)]
+    [InlineData("VTT", ArabicVtt, WrappedArabicVtt)]
+    [InlineData("ttml", ArabicTtml, WrappedArabicTtml)]
+    public async Task ArabicSrtFile_IsWrappedAsWebVttForHlsAndAsTtml(string format, string output, string expected)
     {
         HasSubtitleStream("subrip");
         _server.Output = Encoding.UTF8.GetBytes(output);
+
+        var subtitle = await GetSubtitlesAsync(ResolveSubtitleEncoder(), format);
+
+        Assert.Equal(expected, Encoding.UTF8.GetString(subtitle));
+    }
+
+    [Fact]
+    public async Task ArabicVttFile_IsWrappedWhenPassedThrough()
+    {
+        HasSubtitleStream("webvtt");
+        _server.Output = Encoding.UTF8.GetBytes(ArabicVtt);
+
+        var vtt = await GetSubtitlesAsync(ResolveSubtitleEncoder(), "vtt");
+
+        Assert.Equal(WrappedArabicVtt, Encoding.UTF8.GetString(vtt));
+    }
+
+    [Theory]
+    [InlineData("ass")]
+    [InlineData("ssa")]
+    public async Task AssOrSsaOutput_ComesBackUnchanged(string format)
+    {
+        HasSubtitleStream("subrip");
+        _server.Output = Encoding.UTF8.GetBytes(ArabicAss);
 
         var subtitle = await GetSubtitlesAsync(ResolveSubtitleEncoder(), format);
 
@@ -107,6 +136,8 @@ public class AddRtlFixTests
     [Theory]
     [InlineData("srt", ArabicSrt, WrappedArabicSrt)]
     [InlineData("json", ArabicJson, WrappedArabicJson)]
+    [InlineData("vtt", ArabicVtt, WrappedArabicVtt)]
+    [InlineData("ttml", ArabicTtml, WrappedArabicTtml)]
     public async Task ByteOrderMark_IsKept(string format, string output, string expected)
     {
         HasSubtitleStream("subrip");
@@ -152,14 +183,17 @@ public class AddRtlFixTests
     }
 
     [Theory]
-    [InlineData("ass", "srt")]
-    [InlineData("ass", "json")]
-    [InlineData("ssa", "srt")]
-    [InlineData("SSA", "json")]
-    public async Task AssOrSsaSource_ComesBackAsAuthored(string codec, string format)
+    [InlineData("ass", "srt", ArabicSrt)]
+    [InlineData("ass", "json", ArabicJson)]
+    [InlineData("ass", "vtt", ArabicVtt)]
+    [InlineData("ass", "ttml", ArabicTtml)]
+    [InlineData("ssa", "srt", ArabicSrt)]
+    [InlineData("SSA", "json", ArabicJson)]
+    [InlineData("ssa", "webvtt", ArabicVtt)]
+    public async Task AssOrSsaSource_ComesBackAsAuthored(string codec, string format, string output)
     {
         HasSubtitleStream(codec);
-        _server.Output = Encoding.UTF8.GetBytes(format == "json" ? ArabicJson : ArabicSrt);
+        _server.Output = Encoding.UTF8.GetBytes(output);
 
         var subtitle = await GetSubtitlesAsync(ResolveSubtitleEncoder(), format);
 
