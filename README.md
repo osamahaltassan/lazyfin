@@ -1,4 +1,6 @@
-<img src="assets/lazyfin-256.png" alt="Lazyfin icon" width="128" height="128">
+<p align="center">
+  <img src="assets/lazyfin-256.png" alt="Lazyfin icon" width="128" height="128">
+</p>
 
 # Lazyfin
 
