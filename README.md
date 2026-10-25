@@ -25,7 +25,7 @@ The repository goes live with the first release.
 
 ## Enhancements
 
-None released yet.
+- **RTL fix**: right-to-left subtitle lines, such as Arabic or Hebrew, show their end punctuation at the end of the line, the way mpv shows them.
 
 ## Development
 
