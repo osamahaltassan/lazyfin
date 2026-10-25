@@ -67,7 +67,8 @@ jobs:
             uvx --exclude-newer "$EXCLUDE_NEWER" jprm==1.1.0 repo init pages
           fi
           uvx --exclude-newer "$EXCLUDE_NEWER" jprm==1.1.0 repo add pages "artifacts/lazyfin_${VERSION}.zip" \
+            --url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}" \
             --plugin-url "https://github.com/${{ github.repository }}/releases/download/${TAG}/lazyfin_${VERSION}.zip"
-          git -C pages add manifest.json
+          git -C pages add manifest.json lazyfin
           git -C pages commit -m "Add Lazyfin ${VERSION} to manifest"
           git -C pages push origin gh-pages

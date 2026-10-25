@@ -10,6 +10,7 @@ description: >
   Every enhancement is on as soon as Lazyfin is installed, with nothing to configure.
 category: "General"
 owner: "osamahaltassan"
+image: "assets/lazyfin-512.png"
 artifacts:
 - "Jellyfin.Plugin.Lazyfin.dll"
 changelog: >

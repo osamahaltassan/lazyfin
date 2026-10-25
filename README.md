@@ -1,3 +1,5 @@
+<img src="assets/lazyfin-256.png" alt="Lazyfin icon" width="128" height="128">
+
 # Lazyfin
 
 Lazyfin is one Jellyfin plugin that fixes parts of Jellyfin's user experience. Every enhancement is on as soon as Lazyfin is installed, so viewers get a good result without configuring anything.
