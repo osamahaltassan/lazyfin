@@ -31,7 +31,7 @@ namespace Jellyfin.Plugin.Lazyfin.Tests.Enhancements.RtlFix;
 /// calls <c>AddRtlFix</c>, resolves the interface, and calls it the way Jellyfin's <c>SubtitleController</c> does.
 /// RLE is U+202B and PDF is U+202C.
 /// </remarks>
-public class AddRtlFixTests
+public sealed partial class AddRtlFixTests
 {
     private const string MediaSourceId = "6f1c2a52b0e94b6f9d5c0a4e7b1d3c28";
 
@@ -308,12 +308,26 @@ public class AddRtlFixTests
         Assert.IsNotType<FakeSubtitleEncoder>(provider.GetRequiredService<ISubtitleEncoder>());
     }
 
-    [Fact]
-    public void ServicesWithNoServerEncoder_AreLeftUnchanged()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ServicesMissingAServerEncoderOrTranscodeManager_AreLeftUnchanged(bool hasEncoder, bool hasTranscodeManager)
     {
         var services = new ServiceCollection();
         services.AddSingleton(_server);
         services.AddKeyedSingleton<ISubtitleEncoder, FakeSubtitleEncoder>("other plugin");
+        services.AddKeyedSingleton<ITranscodeManager, FakeTranscodeManager>("other plugin");
+        if (hasEncoder)
+        {
+            services.AddSingleton<ISubtitleEncoder, FakeSubtitleEncoder>();
+        }
+
+        if (hasTranscodeManager)
+        {
+            services.AddSingleton<ITranscodeManager, FakeTranscodeManager>();
+        }
+
         var before = services.ToList();
 
         services.AddRtlFix();
@@ -353,7 +367,7 @@ public class AddRtlFixTests
 
         var path = await ResolveSubtitleEncoder().GetSubtitleFilePath(stream, source, CancellationToken.None);
 
-        Assert.Equal(ServerSubtitles.ExtractedPath, path);
+        Assert.Equal(_server.ExtractedPath, path);
         Assert.Equal([$"path {SubtitleIndex} {MediaSourceId}"], _server.Requests);
     }
 
@@ -370,6 +384,7 @@ public class AddRtlFixTests
 
     /// <summary>
     /// Builds the services the way Jellyfin's <c>ApplicationHost</c> does, lets a plugin in, and resolves the subtitle encoder.
+    /// The server's transcode manager is registered first, so <paramref name="registerServer"/> can replace it.
     /// </summary>
     /// <param name="registerServer">Registers the server's encoder. By default, the way <c>ApplicationHost</c> does.</param>
     /// <param name="registerPlugin">Lets the plugin in. By default, <c>AddRtlFix</c>.</param>
@@ -385,6 +400,10 @@ public class AddRtlFixTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton(_server);
         services.AddSingleton(_mediaSources.Object);
+        services.AddSingleton(_mediaEncoder.Object);
+        services.AddSingleton(_paths.Object);
+        services.AddSingleton(_transcodes);
+        services.AddSingleton<ITranscodeManager, FakeTranscodeManager>();
         registerServer(services);
 
         (registerPlugin ?? (s => s.AddRtlFix()))(services);
@@ -432,7 +451,7 @@ public class AddRtlFixTests
     {
         public const string CharacterSet = "windows-1256";
 
-        public const string ExtractedPath = "/cache/subtitles/6f1c2a52b0e94b6f9d5c0a4e7b1d3c28.srt";
+        public string ExtractedPath { get; set; } = "/cache/subtitles/6f1c2a52b0e94b6f9d5c0a4e7b1d3c28.srt";
 
         public byte[] Output { get; set; } = [];
 
@@ -471,7 +490,7 @@ public class AddRtlFixTests
         public Task<string> GetSubtitleFilePath(MediaStream subtitleStream, MediaSourceInfo mediaSource, CancellationToken cancellationToken)
         {
             _subtitles.Requests.Add($"path {subtitleStream.Index} {mediaSource.Id}");
-            return Task.FromResult(ServerSubtitles.ExtractedPath);
+            return Task.FromResult(_subtitles.ExtractedPath);
         }
 
         public Task ExtractAllExtractableSubtitles(MediaSourceInfo mediaSource, CancellationToken cancellationToken)
