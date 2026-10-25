@@ -12,18 +12,22 @@ Proof for LAZ-6, under the spec LAZ-19, part of the map LAZ-2. The tickets live 
 | jellyfin-ffmpeg | 8.1.3-1, `portable_macarm64-gpl`, the build `scripts/dev.sh` pins for both test servers (`ffmpeg version 8.1.3-Jellyfin`) |
 | libass inside it | API `0x1705000`, commit `4a05d812`, CoreText font provider |
 | Burn-in font | Arial, `/System/Library/Fonts/Supplemental/Arial.ttf` (`ArialMT`), picked by libass for ffmpeg's default SRT style. No font option was needed: Arabic and Hebrew drew as real letters on the first run. For the italic case libass picks `Arial Italic.ttf` and falls back to `Arial.ttf` for the Arabic letters, and slants them. |
-| Safari | Not run yet. LAZ-25 fills this in. |
-| Jellyfin Web | Not run yet. LAZ-25 fills this in. |
+| Safari | 27.0 (21625.1.29.18.28), WebKit `605.1.15`, the Safari that ships with macOS 26.7.1 |
+| Jellyfin Web | `normalizeTrackEventText` copied byte for byte from `src/plugins/htmlVideoPlayer/plugin.js` at commit `0c363cbd0a0dede089cb6b7ddb1cb230c0a82479`, which matches `v12.2` |
+| Chromium baseline | The Claude desktop app's built-in browser, Chrome `152.0.7977.167` |
 
 ## Results
 
 | Renderer | Plain copy shows the bug | Result | Screenshots |
 | --- | --- | --- | --- |
 | Burn-in, jellyfin-ffmpeg `subtitles` filter | Yes, in every RTL case | **Pass**, all 10 cases | [burn-in/](embedding-marks-proof/burn-in/) |
+| Safari, Jellyfin Web's custom element path | Yes, in every RTL case | **Pass**, all 9 cases | [safari-page/custom/](embedding-marks-proof/safari-page/custom/) |
+| Safari, Jellyfin Web's native `VTTCue` path | Yes, in every RTL case | **Pass**, all 9 cases | [safari-page/native/](embedding-marks-proof/safari-page/native/) |
+| Chromium baseline, both paths | Yes, in every RTL case | **Pass**, all 9 cases on both paths | [chromium-page/](embedding-marks-proof/chromium-page/) |
 
 ## The sample
 
-[`make_sample.py`](embedding-marks-proof/make_sample.py) holds every case once and writes the two copies, [`sample/plain.srt`](embedding-marks-proof/sample/plain.srt) and [`sample/marked.srt`](embedding-marks-proof/sample/marked.srt). Both are UTF-8 with no byte order mark and LF line endings.
+[`make_sample.py`](embedding-marks-proof/make_sample.py) holds every case once and writes the two copies, [`sample/plain.srt`](embedding-marks-proof/sample/plain.srt) and [`sample/marked.srt`](embedding-marks-proof/sample/marked.srt). Both are UTF-8 with no byte order mark and LF line endings. It also writes [`sample/cues.json`](embedding-marks-proof/sample/cues.json), the cue text the Safari page reads: every case but `10-an8`, lines joined by LF, the way a Jellyfin `TrackEvent.Text` reaches Jellyfin Web.
 
 The marked copy puts RLE (U+202B) right after a line's leading markup and PDF (U+202C) right before its trailing markup: `<i>` + RLE + text + PDF + `</i>`, and `{\an8}` + RLE + text + PDF. Only lines whose first strong letter is right-to-left carry them. The two English lines are the same bytes in both copies. A byte check of both files confirmed all three rules.
 
@@ -77,3 +81,73 @@ Nothing visible sits where the marks are: no box and no gap. Measured on the raw
 ![08 italic](embedding-marks-proof/burn-in/08-italic.png)
 ![09 Hebrew](embedding-marks-proof/burn-in/09-hebrew.png)
 ![10 an8](embedding-marks-proof/burn-in/10-an8.png)
+
+## Safari, Jellyfin Web's two paths
+
+[`page/index.html`](embedding-marks-proof/page/index.html) holds a byte-for-byte copy of `normalizeTrackEventText` from Jellyfin Web commit `0c363cbd`, which adds a left-to-right mark (U+200E) to the start of every line. It shows one case at a time through one of Jellyfin Web's two text subtitle paths, the plain copy above the marked copy, both inside a `dir="ltr"` container, as the player's `videoPlayerContainer` is:
+
+- **Custom element path:** `normalizeTrackEventText(text, true)` through `innerHTML` into `.videoSubtitlesInner`, with Jellyfin Web's own `.videoSubtitles` styles, the way `updateSubtitleText` does it. DOMPurify is skipped, because it removes markup and leaves bidi characters alone.
+- **Native path:** a track from `addTextTrack('subtitles', 'manualTrack', 'und')` with one `VTTCue` per case from `normalizeTrackEventText(text, false)`, added before the track is set to `showing`, the way `setTrackForDisplay` does it. The video is a blank 640x360 H.264 file made by the test servers' jellyfin-ffmpeg, paused 0.75 seconds into the cue.
+
+### How it ran
+
+[`drive_safari.py`](embedding-marks-proof/drive_safari.py) `serve` regenerates the sample, makes the video under `.temp/embedding-marks-proof/page/`, and serves this folder on `127.0.0.1:8765` with Python's built-in HTTP server, plus the byte ranges Safari asks for on the video.
+
+1. **Chromium baseline first.** The agent opened the page in the built-in browser and called `proof.show(path, case)` for every case on both paths. All 18 passed, so the page is right.
+2. **Safari by hand.** The ticket planned to drive Safari through `safaridriver`'s WebDriver API, after the maintainer ran `safaridriver --enable`. The maintainer chose to keep Safari's remote automation off. Instead, the maintainer opened `http://127.0.0.1:8765/page/?step` in Safari, which steps through all 18 views with the right arrow key, and took one window screenshot per step. Each screenshot shows Safari's user agent under the title. The script's `shoot` mode, which drives Safari through WebDriver, stays on the branch for a later rerun, but it has never run against Safari.
+
+No package was added: the page is plain HTML and JavaScript, and the script uses only Python's standard library.
+
+### What the plain copy shows
+
+Safari shows the bug on both paths, in every RTL case, exactly as Chromium does: the period, exclamation mark, and closing quote sit at the right end of the line. In case 04 the reading order breaks, with the period at the right, then `أمس`, then `"The Matrix"`, then `شاهدنا فيلم`. In case 05 the digits sit at the left end.
+
+On the native path this matters: WebVTT asks a renderer to pick each cue's direction from its text, which on its own would lay these lines out right to left. Jellyfin Web's left-to-right mark comes first, so Safari picks left to right, and the native path shows the bug too.
+
+### What the marked copy shows
+
+Both paths look the same in Safari, so one table covers both.
+
+| Case | Marked copy, both paths | Verdict |
+| --- | --- | --- |
+| 01 period | Period at the left end | Pass |
+| 02 exclamation | `!` at the left end | Pass |
+| 03 closing quote | Closing `"` at the left end, the quote reads in order | Pass |
+| 04 English name | Reads `شاهدنا فيلم "The Matrix" أمس.` from the right, name intact, period at the left end | Pass |
+| 05 leading digits | `20` at the right end, where the line starts | Pass |
+| 06 English with Arabic word | Same as the plain copy | Pass |
+| 07 two lines | Arabic line has its period at the left end; English line same as plain | Pass |
+| 08 italic | Still italic, period at the left end | Pass |
+| 09 Hebrew | Period at the left end | Pass |
+
+Nothing visible sits where the marks are: no box and no gap. Each marked line has the same width and centre as its plain line, on the custom element's black box and on the native cue alike. The embedding marks override Jellyfin Web's left-to-right mark on both paths, so the delivery hook does not need Jellyfin Web to change.
+
+### Screenshots
+
+Each screenshot shows the plain copy on top and the marked copy below.
+
+**Safari, custom element path**
+
+![01 period](embedding-marks-proof/safari-page/custom/01-period.jpg)
+![02 exclamation](embedding-marks-proof/safari-page/custom/02-exclamation.jpg)
+![03 closing quote](embedding-marks-proof/safari-page/custom/03-closing-quote.jpg)
+![04 English name](embedding-marks-proof/safari-page/custom/04-english-name.jpg)
+![05 leading digits](embedding-marks-proof/safari-page/custom/05-leading-digits.jpg)
+![06 English with an Arabic word](embedding-marks-proof/safari-page/custom/06-english-with-arabic.jpg)
+![07 two lines](embedding-marks-proof/safari-page/custom/07-two-lines.jpg)
+![08 italic](embedding-marks-proof/safari-page/custom/08-italic.jpg)
+![09 Hebrew](embedding-marks-proof/safari-page/custom/09-hebrew.jpg)
+
+**Safari, native `VTTCue` path**
+
+![01 period](embedding-marks-proof/safari-page/native/01-period.jpg)
+![02 exclamation](embedding-marks-proof/safari-page/native/02-exclamation.jpg)
+![03 closing quote](embedding-marks-proof/safari-page/native/03-closing-quote.jpg)
+![04 English name](embedding-marks-proof/safari-page/native/04-english-name.jpg)
+![05 leading digits](embedding-marks-proof/safari-page/native/05-leading-digits.jpg)
+![06 English with an Arabic word](embedding-marks-proof/safari-page/native/06-english-with-arabic.jpg)
+![07 two lines](embedding-marks-proof/safari-page/native/07-two-lines.jpg)
+![08 italic](embedding-marks-proof/safari-page/native/08-italic.jpg)
+![09 Hebrew](embedding-marks-proof/safari-page/native/09-hebrew.jpg)
+
+The Chromium baseline screenshots, same layout, are in [`chromium-page/custom/`](embedding-marks-proof/chromium-page/custom/) and [`chromium-page/native/`](embedding-marks-proof/chromium-page/native/).
