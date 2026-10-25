@@ -5,15 +5,21 @@ Usage, from the repo root:
     python3 -I research/embedding-marks-proof/make_sample.py
 
 It writes `sample/plain.srt` and `sample/marked.srt` next to this script, UTF-8 with no byte
-order mark and LF line endings. The plain copy is each line as a subtitle author writes it.
-The marked copy wraps every RTL line in RLE (U+202B) and PDF (U+202C), right after the line's
+order mark and LF line endings, and `sample/cues.json`, the cue text the Safari page reads. The
+plain copy is each line as a subtitle author writes it. The marked copy wraps every RTL line in RLE (U+202B) and PDF (U+202C), right after the line's
 leading markup and right before its trailing markup, the way the RTL fix will. Every other line
 is the same bytes in both copies.
 
 `CASES` is the one place the sample is written. Each case is one cue, shown for 1.5 seconds,
 starting every 2 seconds. `render_burn_in.sh` grabs each cue's frame at its `FRAME_AT` time.
+
+`sample/cues.json` lists every case but those in `BURN_IN_ONLY`, each with its `slug`, `title`,
+`start` and `end` in seconds, and its `plain` and `marked` text, lines joined by LF, the way a
+Jellyfin `TrackEvent.Text` reaches Jellyfin Web. The `{\\an8}` case is burn-in only, because
+Jellyfin Web strips `{\\...}` blocks and WebVTT has cue settings instead.
 """
 
+import json
 from pathlib import Path
 
 RLE = "‫"
@@ -48,6 +54,8 @@ CASES = [
     ("10-an8", "Arabic line with {\\an8} at the top of the screen", [rtl("هذه الجملة في أعلى الشاشة.", "{\\an8}")]),
 ]
 
+BURN_IN_ONLY = {"10-an8"}
+
 
 def timestamp(seconds):
     millis = round(seconds * 1000)
@@ -73,11 +81,29 @@ def srt(marked):
     return "\n".join(blocks)
 
 
+def cues():
+    entries = []
+    for number, (slug, title, lines) in enumerate(CASES, start=1):
+        if slug in BURN_IN_ONLY:
+            continue
+        start = number * CUE_STEP
+        entries.append({
+            "slug": slug,
+            "title": title,
+            "start": start,
+            "end": start + CUE_LENGTH,
+            "plain": "\n".join(render_line(line, False) for line in lines),
+            "marked": "\n".join(render_line(line, True) for line in lines),
+        })
+    return json.dumps(entries, ensure_ascii=False, indent=2) + "\n"
+
+
 def main():
     out = Path(__file__).resolve().parent / "sample"
     out.mkdir(exist_ok=True)
     for name, marked in (("plain", False), ("marked", True)):
         (out / f"{name}.srt").write_bytes(srt(marked).encode("utf-8"))
+    (out / "cues.json").write_bytes(cues().encode("utf-8"))
     for number, (slug, _, _) in enumerate(CASES, start=1):
         print(f"{slug} {number * CUE_STEP + FRAME_AT:.2f}")
 

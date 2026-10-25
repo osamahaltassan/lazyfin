@@ -1,0 +1,255 @@
+<!doctype html>
+<!--
+  The Safari page of the embedding marks proof: one case of the sample through one of Jellyfin
+  Web's two text subtitle paths, the plain copy above the marked copy.
+
+  Serve it with `drive_safari.py serve`, then open http://127.0.0.1:8765/page/ and call
+  `await proof.show('custom' | 'native', '<case slug>')`, or open
+  http://127.0.0.1:8765/page/?path=native&case=01-period to show one case on load, or
+  http://127.0.0.1:8765/page/?step to step through every path and case by hand with the right and
+  left arrow keys, for screenshots taken without WebDriver.
+
+  - custom: `normalizeTrackEventText(text, true)` through `innerHTML`, the way
+    `updateSubtitleText` fills `.videoSubtitlesInner`, without DOMPurify.
+  - native: one `VTTCue` per case from `normalizeTrackEventText(text, false)` on a track made by
+    `addTextTrack('subtitles', 'manualTrack', 'und')`, the way `setTrackForDisplay` does, with
+    the video paused inside the cue.
+
+  Both sit inside a `dir="ltr"` container, as the player's `videoPlayerContainer` does.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Embedding marks proof: Jellyfin Web's two paths</title>
+<style>
+    body {
+        margin: 0;
+        background: #fff;
+        color: #111;
+        font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+        font-size: 16px;
+    }
+
+    main {
+        display: inline-block;
+        padding: 12px 16px 16px;
+    }
+
+    h1 {
+        margin: 0 0 2px;
+        font-size: 17px;
+    }
+
+    .meta {
+        margin: 0 0 10px;
+        font-size: 12px;
+        color: #555;
+    }
+
+    .label {
+        margin: 10px 0 4px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
+
+    .stage {
+        position: relative;
+        width: 640px;
+        height: 200px;
+        background: #303030;
+    }
+
+    video {
+        display: block;
+        width: 640px;
+        height: 360px;
+        background: #303030;
+    }
+
+    .videoSubtitles {
+        position: absolute;
+        bottom: 0;
+        text-align: center;
+        left: 0;
+        right: 0;
+        color: #fff;
+        font-size: 170%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .videoSubtitlesInner {
+        max-width: 70%;
+        background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    body:not(.path-custom) .custom,
+    body:not(.path-native) .native {
+        display: none;
+    }
+</style>
+</head>
+<body>
+<main>
+    <h1 id="title">Loading</h1>
+    <p class="meta" id="meta"></p>
+    <div class="videoPlayerContainer" dir="ltr">
+        <section data-copy="plain">
+            <div class="label">PLAIN</div>
+            <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
+            <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+        </section>
+        <section data-copy="marked">
+            <div class="label">MARKED (RLE + line + PDF)</div>
+            <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
+            <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+        </section>
+    </div>
+</main>
+<script>
+const JELLYFIN_WEB_COMMIT = '0c363cbd0a0dede089cb6b7ddb1cb230c0a82479';
+
+/* normalizeTrackEventText: byte for byte from Jellyfin Web src/plugins/htmlVideoPlayer/plugin.js at 0c363cbd */
+function normalizeTrackEventText(text, useHtml) {
+    const result = text
+        .replace(/\\N/gi, '\n') // Correct newline characters
+        .replace(/\r/gi, '') // Remove carriage return characters
+        .replace(/{\\.*?}/gi, '') // Remove ass/ssa tags
+        // Force LTR as the default direction
+        .split('\n').map(val => `\u200E${val}`).join('\n');
+    return useHtml ? result.replace(/\n/gi, '<br>') : result;
+}
+/* end of the copy */
+
+const PATH_NAMES = {
+    custom: 'custom element path, normalizeTrackEventText(text, true) through innerHTML',
+    native: 'native path, VTTCue from normalizeTrackEventText(text, false)'
+};
+
+const FRAME_AT = 0.75;
+
+function nextFrame() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function once(target, type) {
+    return new Promise(resolve => target.addEventListener(type, resolve, { once: true }));
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function loadCopy(section, cues) {
+    const copy = section.dataset.copy;
+    const videoElement = section.querySelector('video');
+    if (videoElement.readyState < 1) {
+        await once(videoElement, 'loadedmetadata');
+    }
+
+    const trackElement = videoElement.addTextTrack('subtitles', 'manualTrack', 'und');
+    const trackCues = new Map();
+    for (const entry of cues) {
+        const TrackCue = window.VTTCue || window.TextTrackCue;
+        const text = normalizeTrackEventText(entry[copy], false);
+        const cue = new TrackCue(entry.start, entry.end, text);
+        trackElement.addCue(cue);
+        trackCues.set(entry.slug, cue);
+    }
+
+    trackElement.mode = 'showing';
+    return { copy, section, videoElement, trackElement, trackCues };
+}
+
+async function showCustom(copy, entry) {
+    copy.section.querySelector('.videoSubtitlesInner').innerHTML = normalizeTrackEventText(entry[copy.copy], true);
+}
+
+async function showNative(copy, entry) {
+    const { videoElement, trackElement, trackCues } = copy;
+    const cue = trackCues.get(entry.slug);
+    videoElement.pause();
+    const seeked = once(videoElement, 'seeked');
+    videoElement.currentTime = entry.start + FRAME_AT;
+    await seeked;
+    for (let tries = 0; tries < 100; tries++) {
+        if (Array.from(trackElement.activeCues || []).includes(cue)) {
+            return;
+        }
+        await wait(30);
+    }
+    throw new Error(`cue ${entry.slug} never became active in the ${copy.copy} copy`);
+}
+
+async function init() {
+    const cues = await (await fetch('/sample/cues.json')).json();
+    const copies = [];
+    for (const section of document.querySelectorAll('section[data-copy]')) {
+        copies.push(await loadCopy(section, cues));
+    }
+
+    async function show(path, slug) {
+        const entry = cues.find(c => c.slug === slug);
+        if (!entry || !PATH_NAMES[path]) {
+            throw new Error(`unknown path ${path} or case ${slug}`);
+        }
+
+        document.body.className = `path-${path}`;
+        document.getElementById('title').textContent = `Case ${entry.slug}: ${entry.title}`;
+        document.getElementById('meta').textContent =
+            `${PATH_NAMES[path]}. Jellyfin Web ${JELLYFIN_WEB_COMMIT.slice(0, 8)}. ${navigator.userAgent}`;
+        for (const copy of copies) {
+            await (path === 'custom' ? showCustom : showNative)(copy, entry);
+        }
+
+        await nextFrame();
+        await wait(250);
+        return `${path} ${slug} shown`;
+    }
+
+    return { cases: cues.map(c => c.slug), show };
+}
+
+window.proof = {
+    ready: init(),
+    async show(path, slug) {
+        return (await this.ready).show(path, slug);
+    }
+};
+
+async function stepThrough() {
+    const { cases } = await window.proof.ready;
+    const steps = Object.keys(PATH_NAMES).flatMap(path => cases.map(slug => [path, slug]));
+    let index = 0;
+    let showing = Promise.resolve();
+    function go(next) {
+        index = Math.min(Math.max(next, 0), steps.length - 1);
+        showing = showing.then(async () => {
+            await window.proof.show(...steps[index]);
+            document.getElementById('title').textContent =
+                `Step ${index + 1} of ${steps.length}. ` + document.getElementById('title').textContent;
+        });
+    }
+    document.addEventListener('keydown', event => {
+        if (event.key === 'ArrowRight' || event.key === ' ') {
+            event.preventDefault();
+            go(index + 1);
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            go(index - 1);
+        }
+    });
+    go(0);
+}
+
+const params = new URLSearchParams(location.search);
+if (params.has('step')) {
+    stepThrough();
+} else if (params.has('path') && params.has('case')) {
+    window.proof.show(params.get('path'), params.get('case'));
+}
+</script>
+</body>
+</html>
