@@ -21,8 +21,6 @@ Lazyfin supports Jellyfin 12.x.
 2. Open **Catalog**, pick **Lazyfin**, and install it.
 3. Restart Jellyfin.
 
-The repository goes live with the first release.
-
 ## Enhancements
 
 - **RTL fix**: right-to-left subtitle lines, such as Arabic or Hebrew, show their end punctuation at the end of the line, the way mpv shows them.
