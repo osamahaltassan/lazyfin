@@ -64,6 +64,6 @@ Lazyfin references `Jellyfin.Controller` and `Jellyfin.Model` 12.0.0, the oldest
 1. Move the `## [Unreleased]` changelog entries under `## X.Y.Z - yyyy-mm-dd`.
 2. Publish a GitHub Release with the tag `vX.Y.Z`.
 
-The `Release` workflow then tests and builds `lazyfin_X.Y.Z.0.zip`, attaches it to the release, and adds that version to `manifest.json` on the `gh-pages` branch. A prerelease gets its zip but stays out of the manifest.
+The `Release` workflow then tests and builds `lazyfin_X.Y.Z.0.zip`, attaches it to the release, and adds that version to `manifest.json` on the `gh-pages` branch. `jprm` packs the icon named by `image` in `build.yaml` into the zip and publishes it on `gh-pages` beside the manifest, so the catalog can show it. A prerelease gets its zip but stays out of the manifest.
 
 Before the first release, turn on GitHub Pages for the `gh-pages` branch, so the repository URL in `README.md` works.

@@ -228,6 +228,7 @@ cmd_release() {
         plugin build . --output "$work/artifacts" --version "$version" --dotnet-framework net10.0 >/dev/null)
     uvx --exclude-newer "$exclude_newer" jprm==1.1.0 repo init "$work/pages" >/dev/null
     uvx --exclude-newer "$exclude_newer" jprm==1.1.0 repo add "$work/pages" "$work/artifacts/lazyfin_$version.zip" \
+        --url "http://127.0.0.1:$REPO_PORT" \
         --plugin-url "http://127.0.0.1:$REPO_PORT/lazyfin_$version.zip" >/dev/null
     cp "$work/artifacts/lazyfin_$version.zip" "$work/pages/"
 
