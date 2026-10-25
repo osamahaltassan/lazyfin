@@ -2,20 +2,21 @@
 
 Evidence for the check that the RTL fix works end to end on the local 12.2 and 13.0 test servers from `scripts/dev.sh`, with a control run without Lazyfin beside a fix run with it. This branch is never merged.
 
-This file starts with the subtitle bytes. The web player checks in Safari and the built-in browser and the burn-in checks add their rows to the same tables later.
+This file holds the subtitle bytes and the web player in Safari. The web player check in the built-in browser and the burn-in check add their rows to each server's section later.
 
 ## Versions
 
 | What | Version |
 | --- | --- |
 | macOS | 26.7.1 (25G241), Apple silicon |
-| Safari | 27.0 (21625.1.29.18.28) |
+| Safari | 27.0 (21625.1.29.18.28), driven through `safaridriver` and the W3C WebDriver API |
 | Built-in browser | The Claude desktop app's browser pane, Chromium `152.0.7977.167` |
 | Server 12.2 | Jellyfin 12.2.0, `jellyfin_12.2-arm64.tar.xz` from the stable macOS builds |
 | Server 13.0 | Jellyfin 13.0.0, unstable build `2026101212`, `jellyfin_2026101212-arm64.tar.xz` |
 | jellyfin-ffmpeg | 8.1.3-1, `portable_macarm64-gpl`, the build `scripts/dev.sh` pins (`ffmpeg version 8.1.3-Jellyfin`), libass API `0x1705000`, commit `4a05d812`, CoreText font provider |
 | Lazyfin | `main` at `eefc2b2` ("Fix RTL lines in burned-in video"), installed as 0.0.1.0 by `scripts/dev.sh release` through a local plugin repository |
-| Burn-in font | Arial, `/System/Library/Fonts/Supplemental/Arial.ttf` (`ArialMT`), and `Arial Italic.ttf` for the italic line, picked by libass for the server's default style. No fallback font is set on either server. |
+| Burn-in font | Arial, `/System/Library/Fonts/Supplemental/Arial.ttf` (`ArialMT`), and `Arial Italic.ttf` for the italic line, picked by libass for the server's default style. |
+| Fallback font | `Arial.ttf`, a copy of the same Arial file, in `.temp/rtl-check/fonts`, set as each server's fallback font folder from the Safari check on. Jellyfin Web hands it to SubtitlesOctopus, its ASS renderer. |
 
 ## The test library
 
@@ -42,14 +43,15 @@ The test video is 10 seconds, not the 15 the spec guessed. Both cues fit in it w
 Both servers keep their defaults, apart from the library:
 
 - One `Movies` library at `.temp/rtl-check/library`, with "Save subtitles with media" on, the default, so an upload lands next to the video.
-- Fallback fonts stay off. The burn-in proof needed no font for Arabic, and one burned-in control frame per server confirms Arabic draws as letters, not boxes. See [Burn-in font check](#burn-in-font-check).
+- Fallback fonts were off for the bytes check. The burn-in proof needed no font for Arabic, and one burned-in control frame per server confirms Arabic draws as letters, not boxes. See [Burn-in font check](#burn-in-font-check).
+- Fallback fonts are on from the Safari check on, with `.temp/rtl-check/fonts` holding only `Arial.ttf`. Without a fallback font, Jellyfin Web's ASS renderer, SubtitlesOctopus, has no Arabic font, and the ASS track drew every Arabic letter as a box in a trial run. A screenshot with boxes is never a result, so this was set through the API on both servers before the Safari control run, and stays on for the later checks.
 - The test admin's subtitle settings stay at their defaults. The burn-in check sets Burn subtitles itself.
 
 ## The runs
 
 **Control run.** Lazyfin 0.0.0.0 was uninstalled on each server through the Dashboard's plugin page, in the built-in browser, and both servers were restarted. `GET /Plugins` then listed AudioDB, ListenBrainz Similarity Provider, MusicBrainz, OMDb, Studio Images, and TMDb on both, and no Lazyfin.
 
-**The upload.** Safari would not start a WebDriver session. First it refused because remote automation was off. After the maintainer turned it on, Safari timed out creating the session. The maintainer turned remote automation off again and uploaded `arabic.srt` by hand on the 12.2 server: Jellyfin Web's subtitle editor, language Arabic, file picked in the dialog. The server saved it as `Lazyfin RTL Uploaded (2026).ara.srt`, byte for byte the same as `arabic.srt`.
+**The upload.** In the bytes check, Safari would not start a WebDriver session. First it refused because remote automation was off. After the maintainer turned it on, Safari timed out creating the session. The maintainer turned remote automation off again and uploaded `arabic.srt` by hand on the 12.2 server: Jellyfin Web's subtitle editor, language Arabic, file picked in the dialog. The server saved it as `Lazyfin RTL Uploaded (2026).ara.srt`, byte for byte the same as `arabic.srt`.
 
 The 13.0 server reads the same folder, so it got the same file through a metadata refresh of the item, not a second upload. A second upload would have saved a second file, `….ara.0.srt`, because Jellyfin's `SubtitleManager` never overwrites, and both servers would then have listed two Arabic subtitles. After the refresh, both servers list one Arabic external subtitle on the Uploaded movie.
 
@@ -83,7 +85,27 @@ The Arabic word مرحبا means hello.
 
 The 12.2 and 13.0 servers returned identical bytes for every file, in the control run and in the fix run.
 
+## The web player in Safari
+
+[`drive_safari.py`](rtl-fix-verification/drive_safari.py) drove Jellyfin Web in Safari through `safaridriver`. For each server and run, it opened one fresh WebDriver session, which starts with an empty cache and no sign-in, and signed in as the test admin through the login form. For each of the five tracks it opened the movie's details page, picked the track in its Subtitles menu, clicked Play, paused, and seeked to 2.5 s for cue 1 and 7.0 s for cue 2. It then hid the player's controls with a style rule, so they never cover a subtitle, and saved a screenshot cropped to the video picture, 960 pixels wide. Burn subtitles stayed at Auto, so text subtitles were delivered, not burned in.
+
+Beside each screenshot the driver read what the page showed: the renderer, the subtitle text, and the RLE and PDF marks in it. That shows the fix run's screenshots came from the marked subtitles, not from a cache.
+
+- **Arabic and English SRT tracks:** Jellyfin Web draws them with its custom subtitle element, from `Stream.js`. The MP4s play directly, and the MKV plays as an HLS remux. In the fix run the element held 3 RLE and 3 PDF on cue 1 and 1 of each on cue 2, on every Arabic track. In the control run it held none, and the English track held none in either run.
+- **Arabic ASS track:** SubtitlesOctopus draws it on a canvas, with the fallback font.
+
+**Judging.** The English and ASS screenshots are pixel for pixel the same in both runs on both servers: ffmpeg's PSNR between control and fix is infinite. The External and Uploaded screenshots are pixel for pixel the same as each other, and the Embedded ones differ from them only in video decoding noise, at a PSNR above 52 dB. 12.2 and 13.0 gave pixel-identical screenshots for every track.
+
+- **The control shows the bug** on every Arabic SRT track. The period sits at the right end of each Arabic line, where an Arabic reader starts. The "The Matrix" line reads in left-to-right order, with `!` at the right end. The italic line has its period at the right end.
+- **The fix run** puts the period, the `!`, and the italic line's period at the left end of each Arabic line. The "The Matrix" line starts at the right with its first word, and the English name is whole and in order. The English line with مرحبا looks the same as in the control. Nothing shows where the marks sit: no box and no gap.
+- **The `{\an8}` cue** shows at the bottom in both runs. Jellyfin Web's custom element ignores the position tag, with or without Lazyfin. Its period moves from the right end to the left end.
+- **The ASS track** shows its period at the left end in both runs, where the ASS author put it.
+
+How to read the tables below: in each pair, the control is on the left and the fix on the right. Click a picture for the full size.
+
 ## 12.2
+
+### Subtitle bytes
 
 | Check | JSON | WebVTT | SRT | ASS | HLS segment |
 | --- | --- | --- | --- | --- | --- |
@@ -124,7 +146,19 @@ INFO 12.2  Windows-1256  0-ara-subrip   srt  4 of 4 RTL lines wrapped, 1 other l
 INFO 12.2  Windows-1256  0-ara-subrip   vtt  4 of 4 RTL lines wrapped, 1 other lines unmarked
 ```
 
+### Safari web player
+
+| Check | Renderer | Result | Control, cue 1 | Fix, cue 1 | Control, cue 2 | Fix, cue 2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Safari, External, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/12.2/external-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/12.2/external-arabic-srt-cue1.jpg" width="200" alt="12.2 control External, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/12.2/external-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/12.2/external-arabic-srt-cue1.jpg" width="200" alt="12.2 fix External, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/12.2/external-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/12.2/external-arabic-srt-cue2.jpg" width="200" alt="12.2 control External, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/12.2/external-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/12.2/external-arabic-srt-cue2.jpg" width="200" alt="12.2 fix External, Arabic SRT cue2"></a> |
+| Safari, Embedded, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/12.2/embedded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/12.2/embedded-arabic-srt-cue1.jpg" width="200" alt="12.2 control Embedded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/12.2/embedded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/12.2/embedded-arabic-srt-cue1.jpg" width="200" alt="12.2 fix Embedded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/12.2/embedded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/12.2/embedded-arabic-srt-cue2.jpg" width="200" alt="12.2 control Embedded, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/12.2/embedded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/12.2/embedded-arabic-srt-cue2.jpg" width="200" alt="12.2 fix Embedded, Arabic SRT cue2"></a> |
+| Safari, Uploaded, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/12.2/uploaded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/12.2/uploaded-arabic-srt-cue1.jpg" width="200" alt="12.2 control Uploaded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/12.2/uploaded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/12.2/uploaded-arabic-srt-cue1.jpg" width="200" alt="12.2 fix Uploaded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/12.2/uploaded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/12.2/uploaded-arabic-srt-cue2.jpg" width="200" alt="12.2 control Uploaded, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/12.2/uploaded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/12.2/uploaded-arabic-srt-cue2.jpg" width="200" alt="12.2 fix Uploaded, Arabic SRT cue2"></a> |
+| Safari, External, English SRT | Custom element | **Pass**. Pixel for pixel the same as the control. | <a href="rtl-fix-verification/safari/control/12.2/external-english-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/12.2/external-english-srt-cue1.jpg" width="200" alt="12.2 control External, English SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/12.2/external-english-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/12.2/external-english-srt-cue1.jpg" width="200" alt="12.2 fix External, English SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/12.2/external-english-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/12.2/external-english-srt-cue2.jpg" width="200" alt="12.2 control External, English SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/12.2/external-english-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/12.2/external-english-srt-cue2.jpg" width="200" alt="12.2 fix External, English SRT cue2"></a> |
+| Safari, Embedded, Arabic ASS | SubtitlesOctopus canvas | **Pass**. Pixel for pixel the same as the control. | <a href="rtl-fix-verification/safari/control/12.2/embedded-arabic-ass-cue1.jpg"><img src="rtl-fix-verification/safari/control/12.2/embedded-arabic-ass-cue1.jpg" width="200" alt="12.2 control Embedded, Arabic ASS cue1"></a> | <a href="rtl-fix-verification/safari/fix/12.2/embedded-arabic-ass-cue1.jpg"><img src="rtl-fix-verification/safari/fix/12.2/embedded-arabic-ass-cue1.jpg" width="200" alt="12.2 fix Embedded, Arabic ASS cue1"></a> | <a href="rtl-fix-verification/safari/control/12.2/embedded-arabic-ass-cue2.jpg"><img src="rtl-fix-verification/safari/control/12.2/embedded-arabic-ass-cue2.jpg" width="200" alt="12.2 control Embedded, Arabic ASS cue2"></a> | <a href="rtl-fix-verification/safari/fix/12.2/embedded-arabic-ass-cue2.jpg"><img src="rtl-fix-verification/safari/fix/12.2/embedded-arabic-ass-cue2.jpg" width="200" alt="12.2 fix Embedded, Arabic ASS cue2"></a> |
+
 ## 13.0
+
+### Subtitle bytes
 
 | Check | JSON | WebVTT | SRT | ASS | HLS segment |
 | --- | --- | --- | --- | --- | --- |
@@ -165,6 +199,16 @@ INFO 13.0  Windows-1256  0-ara-subrip   srt  4 of 4 RTL lines wrapped, 1 other l
 INFO 13.0  Windows-1256  0-ara-subrip   vtt  4 of 4 RTL lines wrapped, 1 other lines unmarked
 ```
 
+### Safari web player
+
+| Check | Renderer | Result | Control, cue 1 | Fix, cue 1 | Control, cue 2 | Fix, cue 2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Safari, External, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/13.0/external-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/13.0/external-arabic-srt-cue1.jpg" width="200" alt="13.0 control External, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/13.0/external-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/13.0/external-arabic-srt-cue1.jpg" width="200" alt="13.0 fix External, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/13.0/external-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/13.0/external-arabic-srt-cue2.jpg" width="200" alt="13.0 control External, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/13.0/external-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/13.0/external-arabic-srt-cue2.jpg" width="200" alt="13.0 fix External, Arabic SRT cue2"></a> |
+| Safari, Embedded, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/13.0/embedded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/13.0/embedded-arabic-srt-cue1.jpg" width="200" alt="13.0 control Embedded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/13.0/embedded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/13.0/embedded-arabic-srt-cue1.jpg" width="200" alt="13.0 fix Embedded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/13.0/embedded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/13.0/embedded-arabic-srt-cue2.jpg" width="200" alt="13.0 control Embedded, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/13.0/embedded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/13.0/embedded-arabic-srt-cue2.jpg" width="200" alt="13.0 fix Embedded, Arabic SRT cue2"></a> |
+| Safari, Uploaded, Arabic SRT | Custom element | **Pass**. Bug in the control, fixed in the fix run. | <a href="rtl-fix-verification/safari/control/13.0/uploaded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/13.0/uploaded-arabic-srt-cue1.jpg" width="200" alt="13.0 control Uploaded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/13.0/uploaded-arabic-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/13.0/uploaded-arabic-srt-cue1.jpg" width="200" alt="13.0 fix Uploaded, Arabic SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/13.0/uploaded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/13.0/uploaded-arabic-srt-cue2.jpg" width="200" alt="13.0 control Uploaded, Arabic SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/13.0/uploaded-arabic-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/13.0/uploaded-arabic-srt-cue2.jpg" width="200" alt="13.0 fix Uploaded, Arabic SRT cue2"></a> |
+| Safari, External, English SRT | Custom element | **Pass**. Pixel for pixel the same as the control. | <a href="rtl-fix-verification/safari/control/13.0/external-english-srt-cue1.jpg"><img src="rtl-fix-verification/safari/control/13.0/external-english-srt-cue1.jpg" width="200" alt="13.0 control External, English SRT cue1"></a> | <a href="rtl-fix-verification/safari/fix/13.0/external-english-srt-cue1.jpg"><img src="rtl-fix-verification/safari/fix/13.0/external-english-srt-cue1.jpg" width="200" alt="13.0 fix External, English SRT cue1"></a> | <a href="rtl-fix-verification/safari/control/13.0/external-english-srt-cue2.jpg"><img src="rtl-fix-verification/safari/control/13.0/external-english-srt-cue2.jpg" width="200" alt="13.0 control External, English SRT cue2"></a> | <a href="rtl-fix-verification/safari/fix/13.0/external-english-srt-cue2.jpg"><img src="rtl-fix-verification/safari/fix/13.0/external-english-srt-cue2.jpg" width="200" alt="13.0 fix External, English SRT cue2"></a> |
+| Safari, Embedded, Arabic ASS | SubtitlesOctopus canvas | **Pass**. Pixel for pixel the same as the control. | <a href="rtl-fix-verification/safari/control/13.0/embedded-arabic-ass-cue1.jpg"><img src="rtl-fix-verification/safari/control/13.0/embedded-arabic-ass-cue1.jpg" width="200" alt="13.0 control Embedded, Arabic ASS cue1"></a> | <a href="rtl-fix-verification/safari/fix/13.0/embedded-arabic-ass-cue1.jpg"><img src="rtl-fix-verification/safari/fix/13.0/embedded-arabic-ass-cue1.jpg" width="200" alt="13.0 fix Embedded, Arabic ASS cue1"></a> | <a href="rtl-fix-verification/safari/control/13.0/embedded-arabic-ass-cue2.jpg"><img src="rtl-fix-verification/safari/control/13.0/embedded-arabic-ass-cue2.jpg" width="200" alt="13.0 control Embedded, Arabic ASS cue2"></a> | <a href="rtl-fix-verification/safari/fix/13.0/embedded-arabic-ass-cue2.jpg"><img src="rtl-fix-verification/safari/fix/13.0/embedded-arabic-ass-cue2.jpg" width="200" alt="13.0 fix Embedded, Arabic ASS cue2"></a> |
+
 ## The library files
 
 The script hashed every subtitle file in the library, the MKV included, before the control run, right after the upload, and after the fix run. Every file is byte for byte the same after the fix run, and Lazyfin wrote nothing into the library.
@@ -194,8 +238,11 @@ From the main checkout, with this branch checked out in a worktree at `<branch>`
 3. Upload `sample/arabic.srt` to the Uploaded movie once, refresh that movie on the other server, then `check_bytes.py snapshot after-upload` and `check_bytes.py fetch control`.
 4. `scripts/dev.sh release`, then `check_bytes.py fetch fix`, `check_bytes.py snapshot after-fix`, and `check_bytes.py judge`.
 
+For the web player in Safari, turn on the fallback font before the control run, then run `drive_safari.py control` after step 3 and `drive_safari.py fix` after step 4. It needs Safari's remote automation on. If `POST /session` times out, quit every Safari process first: an old Safari that had been open for days blocked every session until it was quit. Safari's page zoom here is 85%, which makes WebDriver's element click miss, so the driver clicks with mouse actions at points scaled by the zoom.
+
 ## Not checked here
 
-- What a viewer sees. These are the bytes every client receives. The web player and burn-in checks judge the screen.
+- What a viewer sees in the built-in browser and in burn-in. Their checks add their own rows.
 - The upload went through Jellyfin Web on 12.2 only. 13.0 read the same saved file.
-- No Safari WebDriver driver ran. Safari could not start a session, so the upload was done by hand, and nothing of a driver is on this branch.
+- The upload was done by hand in the bytes check, so the upload dialog was not driven through WebDriver. The Safari check reused that one uploaded file.
+- Safari's own native HLS player and the `VTTCue` path. Jellyfin Web in Safari drew every text track with its custom element. The embedding marks proof on the `research/embedding-marks-proof` branch proved both other paths with hand-made files.
