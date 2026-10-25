@@ -1,0 +1,86 @@
+"""Writes the embedding marks proof sample in two copies, plain and marked.
+
+Usage, from the repo root:
+
+    python3 -I research/embedding-marks-proof/make_sample.py
+
+It writes `sample/plain.srt` and `sample/marked.srt` next to this script, UTF-8 with no byte
+order mark and LF line endings. The plain copy is each line as a subtitle author writes it.
+The marked copy wraps every RTL line in RLE (U+202B) and PDF (U+202C), right after the line's
+leading markup and right before its trailing markup, the way the RTL fix will. Every other line
+is the same bytes in both copies.
+
+`CASES` is the one place the sample is written. Each case is one cue, shown for 1.5 seconds,
+starting every 2 seconds. `render_burn_in.sh` grabs each cue's frame at its `FRAME_AT` time.
+"""
+
+from pathlib import Path
+
+RLE = "‫"
+PDF = "‬"
+
+CUE_STEP = 2.0
+CUE_LENGTH = 1.5
+FRAME_AT = 0.75
+
+
+def rtl(text, lead="", trail=""):
+    """An RTL line: the marked copy wraps `text` in RLE and PDF, inside `lead` and `trail`."""
+    return (lead, text, trail, True)
+
+
+def ltr(text):
+    """A line the RTL fix leaves alone, the same in both copies."""
+    return ("", text, "", False)
+
+
+# (slug, what the case checks, lines of its cue)
+CASES = [
+    ("01-period", "Arabic line ending in a period", [rtl("وصلنا إلى المدينة في الصباح.")]),
+    ("02-exclamation", "Arabic line ending in an exclamation mark", [rtl("هذا رائع جدًا!")]),
+    ("03-closing-quote", "Arabic line ending in a closing quote", [rtl('قالت لي: "لا تتأخر"')]),
+    ("04-english-name", "Arabic line quoting an English name, ending in a period", [rtl('شاهدنا فيلم "The Matrix" أمس.')]),
+    ("05-leading-digits", "Arabic line starting with digits", [rtl("20 دقيقة فقط حتى نهاية الفيلم")]),
+    ("06-english-with-arabic", "English line with an Arabic word, unmarked in both copies", [ltr("The Arabic word مرحبا means hello.")]),
+    ("07-two-lines", "Two-line cue: one Arabic line, one English line", [rtl("المفتاح على الطاولة."), ltr("The key is on the table.")]),
+    ("08-italic", "Italic Arabic line", [rtl("كان ذلك مجرد حلم.", "<i>", "</i>")]),
+    ("09-hebrew", "Hebrew line ending in a period", [rtl("שלום לכולם.")]),
+    ("10-an8", "Arabic line with {\\an8} at the top of the screen", [rtl("هذه الجملة في أعلى الشاشة.", "{\\an8}")]),
+]
+
+
+def timestamp(seconds):
+    millis = round(seconds * 1000)
+    hours, millis = divmod(millis, 3_600_000)
+    minutes, millis = divmod(millis, 60_000)
+    secs, millis = divmod(millis, 1000)
+    return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
+
+
+def render_line(line, marked):
+    lead, text, trail, is_rtl = line
+    if marked and is_rtl:
+        return lead + RLE + text + PDF + trail
+    return lead + text + trail
+
+
+def srt(marked):
+    blocks = []
+    for number, (_, _, lines) in enumerate(CASES, start=1):
+        start = number * CUE_STEP
+        body = "\n".join(render_line(line, marked) for line in lines)
+        blocks.append(f"{number}\n{timestamp(start)} --> {timestamp(start + CUE_LENGTH)}\n{body}\n")
+    return "\n".join(blocks)
+
+
+def main():
+    out = Path(__file__).resolve().parent / "sample"
+    out.mkdir(exist_ok=True)
+    for name, marked in (("plain", False), ("marked", True)):
+        (out / f"{name}.srt").write_bytes(srt(marked).encode("utf-8"))
+    for number, (slug, _, _) in enumerate(CASES, start=1):
+        print(f"{slug} {number * CUE_STEP + FRAME_AT:.2f}")
+
+
+if __name__ == "__main__":
+    main()
