@@ -5,13 +5,19 @@ Usage, from the repo root, after `scripts/dev.sh setup` has unpacked the test se
     python3 -I research/embedding-marks-proof/drive_safari.py serve [--ffmpeg PATH]
     python3 -I research/embedding-marks-proof/drive_safari.py shoot [--ffmpeg PATH]
 
-Both make the page's video with jellyfin-ffmpeg once, a blank 640x360 H.264 file in
-`.temp/embedding-marks-proof/page/video.mp4`, and serve this folder on http://127.0.0.1:8765
-with Python's built-in HTTP server, plus `/video.mp4` with the byte ranges Safari asks for.
+Both make the page's videos with jellyfin-ffmpeg once, and serve this folder on
+http://127.0.0.1:8765 with Python's built-in HTTP server, plus:
+
+- `/video.mp4`, a blank 640x360 H.264 file in `.temp/embedding-marks-proof/page/video.mp4`, with
+  the byte ranges Safari asks for.
+- `/hls/video/`, the same blank video as MPEG-TS segments and `main.m3u8`, in
+  `.temp/embedding-marks-proof/page/hls-video/`. Its first PTS is 900000, the 10 seconds Jellyfin's
+  MPEG-TS segments start at, so it lines up with the `X-TIMESTAMP-MAP` in the WebVTT segments of
+  `hls/plain/` and `hls/marked/`, which `make_sample.py` writes.
 
 - `serve` keeps serving until Ctrl-C, so any browser can open http://127.0.0.1:8765/page/.
 - `shoot` starts `safaridriver`, opens the page in Safari through the W3C WebDriver API, and for
-  each path and case calls `proof.show(path, slug)` and saves a screenshot of the page to
+  each path (`custom`, `native`, `hls`) and case calls `proof.show(path, slug)` and saves a screenshot of the page to
   `research/embedding-marks-proof/safari-page/<path>/<slug>.png`. Safari's version lands in
   `.temp/embedding-marks-proof/page/versions.txt`.
 
@@ -20,8 +26,9 @@ with Python's built-in HTTP server, plus `/video.mp4` with the byte ranges Safar
 Only the standard library is used.
 
 Without remote automation, run `serve`, open http://127.0.0.1:8765/page/?step in Safari, and take
-one window screenshot per step, pressing the right arrow key between them. LAZ-25 ran that way,
-because the maintainer kept remote automation off, so `shoot` has never run against Safari.
+one window screenshot per step, pressing the right arrow key between them. `?step=hls` steps
+through one path only. LAZ-25 and LAZ-26 ran that way, because the maintainer kept remote
+automation off, so `shoot` has never run against Safari.
 """
 
 import argparse
@@ -41,9 +48,10 @@ from pathlib import Path
 PROOF = Path(__file__).resolve().parent
 RAW = Path(".temp/embedding-marks-proof/page")
 VIDEO = RAW / "video.mp4"
+HLS_VIDEO = RAW / "hls-video"
 PAGE_PORT = 8765
 DRIVER_PORT = 4444
-PATHS = ("custom", "native")
+PATHS = ("custom", "native", "hls")
 ELEMENT = "element-6066-11e4-a52e-4f735466cecf"
 
 
@@ -66,9 +74,34 @@ def make_video(ffmpeg):
         check=True)
 
 
+def make_hls_video(ffmpeg):
+    if (HLS_VIDEO / "main.m3u8").exists():
+        return
+    HLS_VIDEO.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [str(ffmpeg), "-hide_banner", "-nostdin", "-loglevel", "error",
+         "-f", "lavfi", "-i", "color=c=0x303030:s=640x360:r=25:d=22",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-bf", "0", "-g", "25", "-keyint_min", "25",
+         "-sc_threshold", "0", "-muxdelay", "0", "-muxpreload", "0", "-output_ts_offset", "10",
+         "-f", "hls", "-hls_time", "6", "-hls_playlist_type", "vod", "-hls_segment_type", "mpegts",
+         "-hls_segment_filename", str(HLS_VIDEO / "main%d.ts"),
+         "-y", str(HLS_VIDEO / "main.m3u8")],
+        check=True)
+
+
 class Handler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
+
+    def translate_path(self, path):
+        name = path.split("?")[0].removeprefix("/hls/video/")
+        if name != path.split("?")[0] and "/" not in name:
+            return str(HLS_VIDEO / name)
+        return super().translate_path(path)
+
+    def guess_type(self, path):
+        types = {".m3u8": "application/vnd.apple.mpegurl", ".ts": "video/mp2t", ".vtt": "text/vtt"}
+        return types.get(Path(path).suffix) or super().guess_type(path)
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
@@ -208,7 +241,9 @@ def main():
     args = parser.parse_args()
 
     subprocess.run([sys.executable, "-I", str(PROOF / "make_sample.py")], check=True, stdout=subprocess.DEVNULL)
-    make_video(args.ffmpeg or default_ffmpeg())
+    ffmpeg = args.ffmpeg or default_ffmpeg()
+    make_video(ffmpeg)
+    make_hls_video(ffmpeg)
     server = start_server()
     try:
         if args.mode == "serve":

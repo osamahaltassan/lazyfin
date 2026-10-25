@@ -24,10 +24,11 @@ Proof for LAZ-6, under the spec LAZ-19, part of the map LAZ-2. The tickets live 
 | Safari, Jellyfin Web's custom element path | Yes, in every RTL case | **Pass**, all 9 cases | [safari-page/custom/](embedding-marks-proof/safari-page/custom/) |
 | Safari, Jellyfin Web's native `VTTCue` path | Yes, in every RTL case | **Pass**, all 9 cases | [safari-page/native/](embedding-marks-proof/safari-page/native/) |
 | Chromium baseline, both paths | Yes, in every RTL case | **Pass**, all 9 cases on both paths | [chromium-page/](embedding-marks-proof/chromium-page/) |
+| Safari native HLS, WebVTT rendition, a stand-in for the iOS app's native player | Yes, in every RTL case | **Pass**, all 9 cases | [safari-hls/](embedding-marks-proof/safari-hls/) |
 
 ## The sample
 
-[`make_sample.py`](embedding-marks-proof/make_sample.py) holds every case once and writes the two copies, [`sample/plain.srt`](embedding-marks-proof/sample/plain.srt) and [`sample/marked.srt`](embedding-marks-proof/sample/marked.srt). Both are UTF-8 with no byte order mark and LF line endings. It also writes [`sample/cues.json`](embedding-marks-proof/sample/cues.json), the cue text the Safari page reads: every case but `10-an8`, lines joined by LF, the way a Jellyfin `TrackEvent.Text` reaches Jellyfin Web.
+[`make_sample.py`](embedding-marks-proof/make_sample.py) holds every case once and writes the two copies, [`sample/plain.srt`](embedding-marks-proof/sample/plain.srt) and [`sample/marked.srt`](embedding-marks-proof/sample/marked.srt). Both are UTF-8 with no byte order mark and LF line endings. It also writes [`sample/cues.json`](embedding-marks-proof/sample/cues.json), the cue text the Safari page reads: every case but `10-an8`, lines joined by LF, the way a Jellyfin `TrackEvent.Text` reaches Jellyfin Web. And it writes one local HLS stream per copy, [`hls/plain/`](embedding-marks-proof/hls/plain/) and [`hls/marked/`](embedding-marks-proof/hls/marked/), whose `subtitles.vtt` holds the same nine cases as WebVTT.
 
 The marked copy puts RLE (U+202B) right after a line's leading markup and PDF (U+202C) right before its trailing markup: `<i>` + RLE + text + PDF + `</i>`, and `{\an8}` + RLE + text + PDF. Only lines whose first strong letter is right-to-left carry them. The two English lines are the same bytes in both copies. A byte check of both files confirmed all three rules.
 
@@ -151,3 +152,65 @@ Each screenshot shows the plain copy on top and the marked copy below.
 ![09 Hebrew](embedding-marks-proof/safari-page/native/09-hebrew.jpg)
 
 The Chromium baseline screenshots, same layout, are in [`chromium-page/custom/`](embedding-marks-proof/chromium-page/custom/) and [`chromium-page/native/`](embedding-marks-proof/chromium-page/native/).
+
+## Safari native HLS
+
+This checks whether Apple's own player honors the marks in a WebVTT track over HLS. **It is a stand-in for the iOS app's native player, not the same renderer.** Safari on a Mac draws in-page HLS subtitles through WebKit, while the iOS app's native player in full screen draws them with AVFoundation. The check on a real iPad settles that.
+
+### The streams
+
+There are two streams, one per copy, so the plain and marked tracks never mix. [`make_sample.py`](embedding-marks-proof/make_sample.py) writes each one's text files:
+
+- `master.m3u8` names `subtitles.m3u8` as a WebVTT subtitle rendition with `DEFAULT=YES` and `AUTOSELECT=YES`, in the line shape Jellyfin's `DynamicHlsHelper` writes, with `LANGUAGE="ara"`. Its video variant is `../video/main.m3u8`.
+- `subtitles.m3u8` lists one 22-second segment, `subtitles.vtt`.
+- `subtitles.vtt` starts with `WEBVTT`, then `X-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000`, as Jellyfin's 12.x HLS subtitle segments do. It holds the nine cases at the same times as the page, UTF-8 with no byte order mark. No left-to-right mark is added: Jellyfin Web never touches HLS subtitles, and the iOS native player gets the server's WebVTT as it is.
+
+[`drive_safari.py`](embedding-marks-proof/drive_safari.py) makes the video with the test servers' jellyfin-ffmpeg: a blank 640x360 H.264 video in four MPEG-TS segments, under `.temp/embedding-marks-proof/page/hls-video/`, served at `/hls/video/`. Its first PTS is 900000, the 10 seconds Jellyfin's MPEG-TS segments start at, so the timestamp map puts each cue at its own time. `ffprobe` confirmed the first PTS of each segment: 900000, 1440000, 1980000, 2520000.
+
+### How it ran
+
+The page's `hls` path plays each stream in a plain `<video>` element whose `src` is the stream's `master.m3u8`. No JavaScript player is involved, so Safari's own HLS player decodes both the video and the subtitles. The page only seeks and pauses. It turns the subtitle track on if Safari has not already, seeks 0.75 seconds into each cue, pauses, and prints under each copy the active cue as Safari parsed it, with its times and the marks spelled out as `[RLE]` and `[PDF]`.
+
+The maintainer kept Safari's remote automation off again, so the script's WebDriver mode did not run. The maintainer opened `http://127.0.0.1:8765/page/?step=hls` in Safari and took one window screenshot per case, 9 in all. The agent checked each one, zoomed in on both subtitles.
+
+Every screenshot's cue line confirms the stream itself was read right:
+
+- Safari picked the track on its own. Its mode was already `showing` before the page touched it, so `DEFAULT=YES` and `AUTOSELECT=YES` worked.
+- Each active cue is a `VTTCue` that starts and ends at the sample's times, such as 2.000 to 3.500 seconds for case 01, so the timestamp map lined up.
+- Each cue's text is the same as the sample, marks included. Safari kept RLE and PDF through the HLS and WebVTT parsers.
+
+Chromium is no baseline here. The built-in browser, Chrome 152, plays the HLS video natively but exposes no text track for the WebVTT rendition and draws no subtitle. The plain copy, rendered by the same Safari player, is the control.
+
+### What the plain copy shows
+
+Safari's HLS player shows the bug in every RTL case, even though no left-to-right mark is added on this path: the period, exclamation mark, and closing quote sit at the right end of the line. In case 04 the reading order breaks, with the period at the right, then `أمس`, then `"The Matrix"`, then `شاهدنا فيلم`. In case 05 the digits sit at the left end. So Safari does not pick a cue's direction from its text, and the RTL fix is needed on this path too.
+
+### What the marked copy shows
+
+| Case | Marked copy | Verdict |
+| --- | --- | --- |
+| 01 period | Period at the left end | Pass |
+| 02 exclamation | `!` at the left end | Pass |
+| 03 closing quote | Closing `"` at the left end, the quote reads in order | Pass |
+| 04 English name | Reads `شاهدنا فيلم "The Matrix" أمس.` from the right, name intact, period at the left end | Pass |
+| 05 leading digits | `20` at the right end, where the line starts | Pass |
+| 06 English with Arabic word | Same as the plain copy | Pass |
+| 07 two lines | Arabic line has its period at the left end; English line same as plain | Pass |
+| 08 italic | Still italic, period at the left end | Pass |
+| 09 Hebrew | Period at the left end | Pass |
+
+Nothing visible sits where the marks are: no box and no gap. Each marked line has the same width and centre as its plain line, on the same black cue box.
+
+### Screenshots
+
+Each screenshot shows the plain stream on top and the marked stream below, each with its cue line under it. The raw screenshots, as the maintainer pasted them, stay in `.temp/embedding-marks-proof/safari-hls-manual/`.
+
+![01 period](embedding-marks-proof/safari-hls/01-period.jpg)
+![02 exclamation](embedding-marks-proof/safari-hls/02-exclamation.jpg)
+![03 closing quote](embedding-marks-proof/safari-hls/03-closing-quote.jpg)
+![04 English name](embedding-marks-proof/safari-hls/04-english-name.jpg)
+![05 leading digits](embedding-marks-proof/safari-hls/05-leading-digits.jpg)
+![06 English with an Arabic word](embedding-marks-proof/safari-hls/06-english-with-arabic.jpg)
+![07 two lines](embedding-marks-proof/safari-hls/07-two-lines.jpg)
+![08 italic](embedding-marks-proof/safari-hls/08-italic.jpg)
+![09 Hebrew](embedding-marks-proof/safari-hls/09-hebrew.jpg)
