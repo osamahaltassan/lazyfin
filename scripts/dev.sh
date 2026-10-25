@@ -3,8 +3,8 @@
 #
 # Usage: scripts/dev.sh <command>
 #
-#   setup     Download the pinned server builds, start them, and finish their startup wizard
-#             with the test admin below. Safe to run again.
+#   setup     Download the pinned server builds and ffmpeg, start the servers, and finish their
+#             startup wizard with the test admin below. Safe to run again.
 #   start     Start every test server that is not running.
 #   stop      Stop every running test server.
 #   status    Show each server's URL and whether it is running.
@@ -12,10 +12,14 @@
 #   release   Build the release zip and manifest exactly as CI does, serve them locally,
 #             install Lazyfin through the plugin repository on every server, and check it loaded.
 #
-# Everything lives in .temp/servers, which git ignores. Delete that folder to start over.
+# Every server starts with Jellyfin's own ffmpeg, pinned in FFMPEG and shared from .temp/ffmpeg.
+# A running server picks up a new ffmpeg on its next restart.
+#
+# Everything lives in .temp/servers and .temp/ffmpeg, which git ignores. Delete them to start over.
 # Test admin on every server: user "lazyfin", password "lazyfin".
 #
-# Every build in SERVERS was released at least 7 days before it was pinned. See AGENTS.md, Dependency Age.
+# Every build in SERVERS and FFMPEG was released at least 7 days before it was pinned. See AGENTS.md,
+# Dependency Age.
 
 set -euo pipefail
 
@@ -29,6 +33,9 @@ SERVERS=(
     "12.2|8122|https://repo.jellyfin.org/files/server/macos/stable/v12.2/arm64/jellyfin_12.2-arm64.tar.xz"
     "13.0-2026101212|8130|https://repo.jellyfin.org/files/server/macos/unstable/2026101212/arm64/jellyfin_2026101212-arm64.tar.xz"
 )
+
+# version|download URL|SHA-256 digest that GitHub publishes for the asset
+FFMPEG="8.1.3-1|https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz|22445d7299742749ad2eeb9ce87963d50def0357e45b3e6c7b69987c8365dbf6"
 
 ADMIN_USER="lazyfin"
 ADMIN_PASSWORD="lazyfin"
@@ -77,6 +84,52 @@ download() {
     curl -sSLf "$url" | tar -xJ -C "$dir"
 }
 
+ffmpeg_field() { cut -d'|' -f"$1" <<<"$FFMPEG"; }
+
+ffmpeg_dir() { echo "$REPO/.temp/ffmpeg/$(ffmpeg_field 1)"; }
+
+# Downloads the FFMPEG pin into ffmpeg_dir once. The folder appears only after the digest check,
+# the unpack, and `ffmpeg -version` all pass, so a failed run never leaves a folder that looks complete.
+download_ffmpeg() {
+    local dir version url digest work actual
+    dir="$(ffmpeg_dir)"
+    version="$(ffmpeg_field 1)"
+    url="$(ffmpeg_field 2)"
+    digest="$(ffmpeg_field 3)"
+    if [[ -x "$dir/ffmpeg" ]]; then
+        return 0
+    fi
+    log "Downloading ffmpeg $version"
+    mkdir -p "$(dirname "$dir")"
+    rm -rf "$dir".partial.*
+    work="$(mktemp -d "$dir.partial.XXXXXX")"
+    if ! curl -sSLf -o "$work/ffmpeg.tar.xz" "$url"; then
+        rm -rf "$work"
+        log "Could not download ffmpeg $version from $url."
+        return 1
+    fi
+    actual="$(shasum -a 256 "$work/ffmpeg.tar.xz" | cut -d' ' -f1)"
+    if [[ "$actual" != "$digest" ]]; then
+        rm -rf "$work"
+        log "The ffmpeg $version download has SHA-256 $actual, but FFMPEG pins $digest. Nothing was installed."
+        return 1
+    fi
+    mkdir "$work/ffmpeg"
+    if ! tar -xJf "$work/ffmpeg.tar.xz" -C "$work/ffmpeg" || [[ ! -x "$work/ffmpeg/ffprobe" ]]; then
+        rm -rf "$work"
+        log "Could not unpack ffmpeg and ffprobe from the ffmpeg $version download. Nothing was installed."
+        return 1
+    fi
+    if ! "$work/ffmpeg/ffmpeg" -version >/dev/null 2>&1; then
+        rm -rf "$work"
+        log "ffmpeg $version does not run, so it was not installed in $dir."
+        return 1
+    fi
+    mv "$work/ffmpeg" "$dir"
+    rm -rf "$work"
+    log "Installed ffmpeg $version in $dir"
+}
+
 seed_port() {
     local config port
     config="$(server_dir "$1")/config"
@@ -100,9 +153,11 @@ start_server() {
     if is_running "$1"; then
         return 0
     fi
+    download_ffmpeg
     seed_port "$1"
     mkdir -p "$dir/data" "$dir/cache" "$dir/log"
     nohup "$dir/jellyfin/jellyfin" \
+        --ffmpeg "$(ffmpeg_dir)/ffmpeg" \
         --datadir "$dir/data" \
         --configdir "$dir/config" \
         --cachedir "$dir/cache" \
@@ -259,7 +314,7 @@ cmd_release() {
 case "${1:-}" in
     setup | start | stop | status | install | release) "cmd_$1" ;;
     *)
-        sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac

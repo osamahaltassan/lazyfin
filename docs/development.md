@@ -30,14 +30,16 @@ Both have the test admin `lazyfin`, password `lazyfin`.
 
 | Command | What it does |
 | --- | --- |
-| `scripts/dev.sh setup` | Downloads both servers, starts them, and finishes their startup wizard. Run it once. |
+| `scripts/dev.sh setup` | Downloads both servers and ffmpeg, starts the servers, and finishes their startup wizard. Run it once. |
 | `scripts/dev.sh install` | Builds Lazyfin, installs it on both servers, and restarts them. This is the edit loop. |
 | `scripts/dev.sh release` | Builds the release zip and manifest the way CI does, then installs Lazyfin through a local plugin repository on both servers. |
 | `scripts/dev.sh start`, `stop`, `status` | Controls the servers. |
 
-The servers have no ffmpeg, so playback that needs transcoding fails until you pass one with `--ffmpeg` in `scripts/dev.sh`.
+Both servers run Jellyfin's own ffmpeg, the Apple silicon build of `jellyfin-ffmpeg` pinned in `FFMPEG` at the top of `scripts/dev.sh`, so transcoding and burn-in work. The script downloads it once, checks it against its pinned SHA-256 digest, and unpacks it into `.temp/ffmpeg/<version>`, which both servers share. It starts every server with Jellyfin's own `--ffmpeg` startup option pointing there, so each server's Playback settings page shows that path. A server that is already running picks up ffmpeg on its next restart, such as `install`, `release`, or `stop` then `start`.
 
 To test a newer server build, change its line in `SERVERS` at the top of `scripts/dev.sh`, and delete its folder in `.temp/servers`.
+
+To bump ffmpeg, pick a `jellyfin/jellyfin-ffmpeg` release that is at least 7 days old, and change `FFMPEG` to its version, the URL of its `portable_macarm64-gpl` asset, and the SHA-256 digest GitHub shows for that asset. The new version lands in its own folder on the next start, and you can delete the old one.
 
 ## Adding an enhancement
 
