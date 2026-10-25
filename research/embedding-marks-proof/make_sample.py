@@ -5,7 +5,8 @@ Usage, from the repo root:
     python3 -I research/embedding-marks-proof/make_sample.py
 
 It writes `sample/plain.srt` and `sample/marked.srt` next to this script, UTF-8 with no byte
-order mark and LF line endings, and `sample/cues.json`, the cue text the Safari page reads. The
+order mark and LF line endings, `sample/cues.json`, the cue text the Safari page reads, and one
+local HLS stream per copy in `hls/<copy>/`, for Safari's own HLS player. The
 plain copy is each line as a subtitle author writes it. The marked copy wraps every RTL line in RLE (U+202B) and PDF (U+202C), right after the line's
 leading markup and right before its trailing markup, the way the RTL fix will. Every other line
 is the same bytes in both copies.
@@ -17,6 +18,14 @@ starting every 2 seconds. `render_burn_in.sh` grabs each cue's frame at its `FRA
 `start` and `end` in seconds, and its `plain` and `marked` text, lines joined by LF, the way a
 Jellyfin `TrackEvent.Text` reaches Jellyfin Web. The `{\\an8}` case is burn-in only, because
 Jellyfin Web strips `{\\...}` blocks and WebVTT has cue settings instead.
+
+Each `hls/<copy>/` holds `master.m3u8`, which names `subtitles.m3u8` as a WebVTT subtitle
+rendition with `DEFAULT=YES` and `AUTOSELECT=YES` in the shape Jellyfin's `DynamicHlsHelper`
+writes it, and `subtitles.vtt`, the one WebVTT segment. That segment carries `TIMESTAMP_MAP` after
+the `WEBVTT` line, as Jellyfin's 12.x HLS subtitle segments do, and the same cases as
+`sample/cues.json`. No left-to-right mark is added: Jellyfin Web never touches HLS subtitles.
+The master points at `../video/main.m3u8`, the MPEG-TS video `drive_safari.py` makes, whose first
+PTS is 900000, so each cue's local time is its playback time.
 """
 
 import json
@@ -24,6 +33,9 @@ from pathlib import Path
 
 RLE = "‫"
 PDF = "‬"
+
+TIMESTAMP_MAP = "X-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000"
+SUBTITLE_SEGMENT = 22.0
 
 CUE_STEP = 2.0
 CUE_LENGTH = 1.5
@@ -57,12 +69,12 @@ CASES = [
 BURN_IN_ONLY = {"10-an8"}
 
 
-def timestamp(seconds):
+def timestamp(seconds, separator=","):
     millis = round(seconds * 1000)
     hours, millis = divmod(millis, 3_600_000)
     minutes, millis = divmod(millis, 60_000)
     secs, millis = divmod(millis, 1000)
-    return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
+    return f"{hours:02}:{minutes:02}:{secs:02}{separator}{millis:03}"
 
 
 def render_line(line, marked):
@@ -98,12 +110,50 @@ def cues():
     return json.dumps(entries, ensure_ascii=False, indent=2) + "\n"
 
 
+def vtt(marked):
+    blocks = ["WEBVTT\n" + TIMESTAMP_MAP + "\n"]
+    for number, (slug, _, lines) in enumerate(CASES, start=1):
+        if slug in BURN_IN_ONLY:
+            continue
+        start = number * CUE_STEP
+        body = "\n".join(render_line(line, marked) for line in lines)
+        blocks.append(f"{slug}\n{timestamp(start, '.')} --> {timestamp(start + CUE_LENGTH, '.')}\n{body}\n")
+    return "\n".join(blocks)
+
+
+def master_playlist():
+    return (
+        "#EXTM3U\n"
+        '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Arabic - SUBRIP",DEFAULT=YES,FORCED=NO,'
+        'AUTOSELECT=YES,URI="subtitles.m3u8",LANGUAGE="ara"\n'
+        '#EXT-X-STREAM-INF:BANDWIDTH=200000,CODECS="avc1.64001e",RESOLUTION=640x360,SUBTITLES="subs"\n'
+        "../video/main.m3u8\n")
+
+
+def subtitle_playlist():
+    return (
+        "#EXTM3U\n"
+        f"#EXT-X-TARGETDURATION:{SUBTITLE_SEGMENT:.0f}\n"
+        "#EXT-X-VERSION:3\n"
+        "#EXT-X-MEDIA-SEQUENCE:0\n"
+        "#EXT-X-PLAYLIST-TYPE:VOD\n"
+        f"#EXTINF:{SUBTITLE_SEGMENT:.6f},\n"
+        "subtitles.vtt\n"
+        "#EXT-X-ENDLIST\n")
+
+
 def main():
     out = Path(__file__).resolve().parent / "sample"
     out.mkdir(exist_ok=True)
     for name, marked in (("plain", False), ("marked", True)):
         (out / f"{name}.srt").write_bytes(srt(marked).encode("utf-8"))
     (out / "cues.json").write_bytes(cues().encode("utf-8"))
+    for name, marked in (("plain", False), ("marked", True)):
+        stream = out.parent / "hls" / name
+        stream.mkdir(parents=True, exist_ok=True)
+        (stream / "master.m3u8").write_bytes(master_playlist().encode("utf-8"))
+        (stream / "subtitles.m3u8").write_bytes(subtitle_playlist().encode("utf-8"))
+        (stream / "subtitles.vtt").write_bytes(vtt(marked).encode("utf-8"))
     for number, (slug, _, _) in enumerate(CASES, start=1):
         print(f"{slug} {number * CUE_STEP + FRAME_AT:.2f}")
 

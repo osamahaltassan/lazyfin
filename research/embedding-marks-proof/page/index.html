@@ -1,26 +1,32 @@
 <!doctype html>
 <!--
   The Safari page of the embedding marks proof: one case of the sample through one of Jellyfin
-  Web's two text subtitle paths, the plain copy above the marked copy.
+  Web's two text subtitle paths, or through Safari's own HLS player, the plain copy above the
+  marked copy.
 
   Serve it with `drive_safari.py serve`, then open http://127.0.0.1:8765/page/ and call
-  `await proof.show('custom' | 'native', '<case slug>')`, or open
+  `await proof.show('custom' | 'native' | 'hls', '<case slug>')`, or open
   http://127.0.0.1:8765/page/?path=native&case=01-period to show one case on load, or
   http://127.0.0.1:8765/page/?step to step through every path and case by hand with the right and
-  left arrow keys, for screenshots taken without WebDriver.
+  left arrow keys, for screenshots taken without WebDriver. `?step=hls` steps through one path.
 
   - custom: `normalizeTrackEventText(text, true)` through `innerHTML`, the way
     `updateSubtitleText` fills `.videoSubtitlesInner`, without DOMPurify.
   - native: one `VTTCue` per case from `normalizeTrackEventText(text, false)` on a track made by
     `addTextTrack('subtitles', 'manualTrack', 'und')`, the way `setTrackForDisplay` does, with
     the video paused inside the cue.
+  - hls: a plain `<video>` with `src` set to `/hls/<copy>/master.m3u8`, no JavaScript player, so
+    Safari's own HLS player decodes the video and the WebVTT rendition, with no left-to-right
+    mark. The page turns the subtitle track on if Safari has not already, seeks into the cue, and
+    pauses. Under each copy it prints the active cue as Safari parsed it, with its times and the
+    marks spelled out, and the track's mode before the page touched it.
 
   Both sit inside a `dir="ltr"` container, as the player's `videoPlayerContainer` does.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Embedding marks proof: Jellyfin Web's two paths</title>
+<title>Embedding marks proof: Jellyfin Web's two paths and Safari's HLS player</title>
 <style>
     body {
         margin: 0;
@@ -85,8 +91,17 @@
         background-color: rgba(0, 0, 0, 0.8);
     }
 
+    .cueinfo {
+        margin: 4px 0 0;
+        max-width: 640px;
+        font-size: 12px;
+        color: #555;
+        overflow-wrap: anywhere;
+    }
+
     body:not(.path-custom) .custom,
-    body:not(.path-native) .native {
+    body:not(.path-native) .native,
+    body:not(.path-hls) .hls {
         display: none;
     }
 </style>
@@ -100,11 +115,15 @@
             <div class="label">PLAIN</div>
             <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
             <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+            <video class="hls" muted playsinline preload="auto"></video>
+            <p class="cueinfo hls"></p>
         </section>
         <section data-copy="marked">
             <div class="label">MARKED (RLE + line + PDF)</div>
             <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
             <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+            <video class="hls" muted playsinline preload="auto"></video>
+            <p class="cueinfo hls"></p>
         </section>
     </div>
 </main>
@@ -125,8 +144,11 @@ function normalizeTrackEventText(text, useHtml) {
 
 const PATH_NAMES = {
     custom: 'custom element path, normalizeTrackEventText(text, true) through innerHTML',
-    native: 'native path, VTTCue from normalizeTrackEventText(text, false)'
+    native: 'native path, VTTCue from normalizeTrackEventText(text, false)',
+    hls: 'Safari native HLS, <video src="/hls/<copy>/master.m3u8">, WebVTT rendition, no left-to-right mark'
 };
+
+const MARK_NAMES = { '\u202B': '[RLE]', '\u202C': '[PDF]', '\u200E': '[LRM]', '\u200F': '[RLM]', '\n': ' / ' };
 
 const FRAME_AT = 0.75;
 
@@ -142,9 +164,20 @@ function wait(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function until(check, failure, ms = 10000) {
+    for (let waited = 0; waited < ms; waited += 50) {
+        const result = check();
+        if (result) {
+            return result;
+        }
+        await wait(50);
+    }
+    throw new Error(failure);
+}
+
 async function loadCopy(section, cues) {
     const copy = section.dataset.copy;
-    const videoElement = section.querySelector('video');
+    const videoElement = section.querySelector('video.native');
     if (videoElement.readyState < 1) {
         await once(videoElement, 'loadedmetadata');
     }
@@ -183,6 +216,53 @@ async function showNative(copy, entry) {
     throw new Error(`cue ${entry.slug} never became active in the ${copy.copy} copy`);
 }
 
+async function loadHls(copy) {
+    if (copy.hls) {
+        return copy.hls;
+    }
+
+    const videoElement = copy.section.querySelector('video.hls');
+    videoElement.src = `/hls/${copy.copy}/master.m3u8`;
+    await until(() => videoElement.readyState >= 2, `the ${copy.copy} stream never loaded`);
+    const trackElement = await until(
+        () => Array.from(videoElement.textTracks).find(track => track.kind === 'subtitles' || track.kind === 'captions'),
+        `no subtitle track in the ${copy.copy} stream`);
+
+    const modeBefore = trackElement.mode;
+    trackElement.mode = 'showing';
+    copy.hls = { videoElement, trackElement, modeBefore };
+    return copy.hls;
+}
+
+function describeCue(cue, entry, copy) {
+    const text = cue.text ?? '';
+    const spelled = Array.from(text, ch => MARK_NAMES[ch] || ch).join('');
+    const same = text === entry[copy.copy] ? 'same text as the sample' : 'differs from the sample';
+    const { trackElement, modeBefore } = copy.hls;
+    return `Active cue (${cue.constructor.name}, ${cue.startTime.toFixed(3)} to ${cue.endTime.toFixed(3)} s, ${same}): ${spelled}. ` +
+        `Track "${trackElement.label}" (${trackElement.language}, ${trackElement.kind}), mode was "${modeBefore}" before the page set "showing".`;
+}
+
+async function showHls(copy, entry) {
+    const { videoElement, trackElement } = await loadHls(copy);
+    const info = copy.section.querySelector('.cueinfo');
+    info.textContent = '';
+    videoElement.pause();
+    videoElement.currentTime = entry.start + FRAME_AT;
+    await until(() => !videoElement.seeking && videoElement.readyState >= 2, `the ${copy.copy} stream never finished seeking`);
+    try {
+        const cue = await until(() => Array.from(trackElement.activeCues || [])
+            .find(active => Math.abs(active.startTime - entry.start) < 0.05),
+            `cue ${entry.slug} never became active in the ${copy.copy} stream`);
+        info.textContent = describeCue(cue, entry, copy);
+    } catch (error) {
+        info.textContent = `No active cue at ${entry.start} s.`;
+        throw error;
+    }
+}
+
+const SHOW = { custom: showCustom, native: showNative, hls: showHls };
+
 async function init() {
     const cues = await (await fetch('/sample/cues.json')).json();
     const copies = [];
@@ -199,9 +279,9 @@ async function init() {
         document.body.className = `path-${path}`;
         document.getElementById('title').textContent = `Case ${entry.slug}: ${entry.title}`;
         document.getElementById('meta').textContent =
-            `${PATH_NAMES[path]}. Jellyfin Web ${JELLYFIN_WEB_COMMIT.slice(0, 8)}. ${navigator.userAgent}`;
+            `${PATH_NAMES[path]}. ${path === 'hls' ? '' : `Jellyfin Web ${JELLYFIN_WEB_COMMIT.slice(0, 8)}. `}${navigator.userAgent}`;
         for (const copy of copies) {
-            await (path === 'custom' ? showCustom : showNative)(copy, entry);
+            await SHOW[path](copy, entry);
         }
 
         await nextFrame();
@@ -221,7 +301,8 @@ window.proof = {
 
 async function stepThrough() {
     const { cases } = await window.proof.ready;
-    const steps = Object.keys(PATH_NAMES).flatMap(path => cases.map(slug => [path, slug]));
+    const paths = params.get('step') ? params.get('step').split(',') : Object.keys(PATH_NAMES);
+    const steps = paths.flatMap(path => cases.map(slug => [path, slug]));
     let index = 0;
     let showing = Promise.resolve();
     function go(next) {
@@ -230,6 +311,9 @@ async function stepThrough() {
             await window.proof.show(...steps[index]);
             document.getElementById('title').textContent =
                 `Step ${index + 1} of ${steps.length}. ` + document.getElementById('title').textContent;
+        }).catch(error => {
+            document.getElementById('title').textContent =
+                `Step ${index + 1} of ${steps.length} failed: ${error.message}`;
         });
     }
     document.addEventListener('keydown', event => {
