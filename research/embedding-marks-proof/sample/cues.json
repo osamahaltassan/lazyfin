@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "01-period",
+    "title": "Arabic line ending in a period",
+    "start": 2.0,
+    "end": 3.5,
+    "plain": "وصلنا إلى المدينة في الصباح.",
+    "marked": "‫وصلنا إلى المدينة في الصباح.‬"
+  },
+  {
+    "slug": "02-exclamation",
+    "title": "Arabic line ending in an exclamation mark",
+    "start": 4.0,
+    "end": 5.5,
+    "plain": "هذا رائع جدًا!",
+    "marked": "‫هذا رائع جدًا!‬"
+  },
+  {
+    "slug": "03-closing-quote",
+    "title": "Arabic line ending in a closing quote",
+    "start": 6.0,
+    "end": 7.5,
+    "plain": "قالت لي: \"لا تتأخر\"",
+    "marked": "‫قالت لي: \"لا تتأخر\"‬"
+  },
+  {
+    "slug": "04-english-name",
+    "title": "Arabic line quoting an English name, ending in a period",
+    "start": 8.0,
+    "end": 9.5,
+    "plain": "شاهدنا فيلم \"The Matrix\" أمس.",
+    "marked": "‫شاهدنا فيلم \"The Matrix\" أمس.‬"
+  },
+  {
+    "slug": "05-leading-digits",
+    "title": "Arabic line starting with digits",
+    "start": 10.0,
+    "end": 11.5,
+    "plain": "20 دقيقة فقط حتى نهاية الفيلم",
+    "marked": "‫20 دقيقة فقط حتى نهاية الفيلم‬"
+  },
+  {
+    "slug": "06-english-with-arabic",
+    "title": "English line with an Arabic word, unmarked in both copies",
+    "start": 12.0,
+    "end": 13.5,
+    "plain": "The Arabic word مرحبا means hello.",
+    "marked": "The Arabic word مرحبا means hello."
+  },
+  {
+    "slug": "07-two-lines",
+    "title": "Two-line cue: one Arabic line, one English line",
+    "start": 14.0,
+    "end": 15.5,
+    "plain": "المفتاح على الطاولة.\nThe key is on the table.",
+    "marked": "‫المفتاح على الطاولة.‬\nThe key is on the table."
+  },
+  {
+    "slug": "08-italic",
+    "title": "Italic Arabic line",
+    "start": 16.0,
+    "end": 17.5,
+    "plain": "<i>كان ذلك مجرد حلم.</i>",
+    "marked": "<i>‫كان ذلك مجرد حلم.‬</i>"
+  },
+  {
+    "slug": "09-hebrew",
+    "title": "Hebrew line ending in a period",
+    "start": 18.0,
+    "end": 19.5,
+    "plain": "שלום לכולם.",
+    "marked": "‫שלום לכולם.‬"
+  }
+]
