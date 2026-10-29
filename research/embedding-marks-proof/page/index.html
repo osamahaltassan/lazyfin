@@ -1,0 +1,339 @@
+<!doctype html>
+<!--
+  The Safari page of the embedding marks proof: one case of the sample through one of Jellyfin
+  Web's two text subtitle paths, or through Safari's own HLS player, the plain copy above the
+  marked copy.
+
+  Serve it with `drive_safari.py serve`, then open http://127.0.0.1:8765/page/ and call
+  `await proof.show('custom' | 'native' | 'hls', '<case slug>')`, or open
+  http://127.0.0.1:8765/page/?path=native&case=01-period to show one case on load, or
+  http://127.0.0.1:8765/page/?step to step through every path and case by hand with the right and
+  left arrow keys, for screenshots taken without WebDriver. `?step=hls` steps through one path.
+
+  - custom: `normalizeTrackEventText(text, true)` through `innerHTML`, the way
+    `updateSubtitleText` fills `.videoSubtitlesInner`, without DOMPurify.
+  - native: one `VTTCue` per case from `normalizeTrackEventText(text, false)` on a track made by
+    `addTextTrack('subtitles', 'manualTrack', 'und')`, the way `setTrackForDisplay` does, with
+    the video paused inside the cue.
+  - hls: a plain `<video>` with `src` set to `/hls/<copy>/master.m3u8`, no JavaScript player, so
+    Safari's own HLS player decodes the video and the WebVTT rendition, with no left-to-right
+    mark. The page turns the subtitle track on if Safari has not already, seeks into the cue, and
+    pauses. Under each copy it prints the active cue as Safari parsed it, with its times and the
+    marks spelled out, and the track's mode before the page touched it.
+
+  Both sit inside a `dir="ltr"` container, as the player's `videoPlayerContainer` does.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Embedding marks proof: Jellyfin Web's two paths and Safari's HLS player</title>
+<style>
+    body {
+        margin: 0;
+        background: #fff;
+        color: #111;
+        font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+        font-size: 16px;
+    }
+
+    main {
+        display: inline-block;
+        padding: 12px 16px 16px;
+    }
+
+    h1 {
+        margin: 0 0 2px;
+        font-size: 17px;
+    }
+
+    .meta {
+        margin: 0 0 10px;
+        font-size: 12px;
+        color: #555;
+    }
+
+    .label {
+        margin: 10px 0 4px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+    }
+
+    .stage {
+        position: relative;
+        width: 640px;
+        height: 200px;
+        background: #303030;
+    }
+
+    video {
+        display: block;
+        width: 640px;
+        height: 360px;
+        background: #303030;
+    }
+
+    .videoSubtitles {
+        position: absolute;
+        bottom: 0;
+        text-align: center;
+        left: 0;
+        right: 0;
+        color: #fff;
+        font-size: 170%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .videoSubtitlesInner {
+        max-width: 70%;
+        background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    .cueinfo {
+        margin: 4px 0 0;
+        max-width: 640px;
+        font-size: 12px;
+        color: #555;
+        overflow-wrap: anywhere;
+    }
+
+    body:not(.path-custom) .custom,
+    body:not(.path-native) .native,
+    body:not(.path-hls) .hls {
+        display: none;
+    }
+</style>
+</head>
+<body>
+<main>
+    <h1 id="title">Loading</h1>
+    <p class="meta" id="meta"></p>
+    <div class="videoPlayerContainer" dir="ltr">
+        <section data-copy="plain">
+            <div class="label">PLAIN</div>
+            <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
+            <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+            <video class="hls" muted playsinline preload="auto"></video>
+            <p class="cueinfo hls"></p>
+        </section>
+        <section data-copy="marked">
+            <div class="label">MARKED (RLE + line + PDF)</div>
+            <div class="stage custom"><div class="videoSubtitles"><div class="videoSubtitlesInner"></div></div></div>
+            <video class="native" src="/video.mp4" muted playsinline preload="auto"></video>
+            <video class="hls" muted playsinline preload="auto"></video>
+            <p class="cueinfo hls"></p>
+        </section>
+    </div>
+</main>
+<script>
+const JELLYFIN_WEB_COMMIT = '0c363cbd0a0dede089cb6b7ddb1cb230c0a82479';
+
+/* normalizeTrackEventText: byte for byte from Jellyfin Web src/plugins/htmlVideoPlayer/plugin.js at 0c363cbd */
+function normalizeTrackEventText(text, useHtml) {
+    const result = text
+        .replace(/\\N/gi, '\n') // Correct newline characters
+        .replace(/\r/gi, '') // Remove carriage return characters
+        .replace(/{\\.*?}/gi, '') // Remove ass/ssa tags
+        // Force LTR as the default direction
+        .split('\n').map(val => `\u200E${val}`).join('\n');
+    return useHtml ? result.replace(/\n/gi, '<br>') : result;
+}
+/* end of the copy */
+
+const PATH_NAMES = {
+    custom: 'custom element path, normalizeTrackEventText(text, true) through innerHTML',
+    native: 'native path, VTTCue from normalizeTrackEventText(text, false)',
+    hls: 'Safari native HLS, <video src="/hls/<copy>/master.m3u8">, WebVTT rendition, no left-to-right mark'
+};
+
+const MARK_NAMES = { '\u202B': '[RLE]', '\u202C': '[PDF]', '\u200E': '[LRM]', '\u200F': '[RLM]', '\n': ' / ' };
+
+const FRAME_AT = 0.75;
+
+function nextFrame() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function once(target, type) {
+    return new Promise(resolve => target.addEventListener(type, resolve, { once: true }));
+}
+
+function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function until(check, failure, ms = 10000) {
+    for (let waited = 0; waited < ms; waited += 50) {
+        const result = check();
+        if (result) {
+            return result;
+        }
+        await wait(50);
+    }
+    throw new Error(failure);
+}
+
+async function loadCopy(section, cues) {
+    const copy = section.dataset.copy;
+    const videoElement = section.querySelector('video.native');
+    if (videoElement.readyState < 1) {
+        await once(videoElement, 'loadedmetadata');
+    }
+
+    const trackElement = videoElement.addTextTrack('subtitles', 'manualTrack', 'und');
+    const trackCues = new Map();
+    for (const entry of cues) {
+        const TrackCue = window.VTTCue || window.TextTrackCue;
+        const text = normalizeTrackEventText(entry[copy], false);
+        const cue = new TrackCue(entry.start, entry.end, text);
+        trackElement.addCue(cue);
+        trackCues.set(entry.slug, cue);
+    }
+
+    trackElement.mode = 'showing';
+    return { copy, section, videoElement, trackElement, trackCues };
+}
+
+async function showCustom(copy, entry) {
+    copy.section.querySelector('.videoSubtitlesInner').innerHTML = normalizeTrackEventText(entry[copy.copy], true);
+}
+
+async function showNative(copy, entry) {
+    const { videoElement, trackElement, trackCues } = copy;
+    const cue = trackCues.get(entry.slug);
+    videoElement.pause();
+    const seeked = once(videoElement, 'seeked');
+    videoElement.currentTime = entry.start + FRAME_AT;
+    await seeked;
+    for (let tries = 0; tries < 100; tries++) {
+        if (Array.from(trackElement.activeCues || []).includes(cue)) {
+            return;
+        }
+        await wait(30);
+    }
+    throw new Error(`cue ${entry.slug} never became active in the ${copy.copy} copy`);
+}
+
+async function loadHls(copy) {
+    if (copy.hls) {
+        return copy.hls;
+    }
+
+    const videoElement = copy.section.querySelector('video.hls');
+    videoElement.src = `/hls/${copy.copy}/master.m3u8`;
+    await until(() => videoElement.readyState >= 2, `the ${copy.copy} stream never loaded`);
+    const trackElement = await until(
+        () => Array.from(videoElement.textTracks).find(track => track.kind === 'subtitles' || track.kind === 'captions'),
+        `no subtitle track in the ${copy.copy} stream`);
+
+    const modeBefore = trackElement.mode;
+    trackElement.mode = 'showing';
+    copy.hls = { videoElement, trackElement, modeBefore };
+    return copy.hls;
+}
+
+function describeCue(cue, entry, copy) {
+    const text = cue.text ?? '';
+    const spelled = Array.from(text, ch => MARK_NAMES[ch] || ch).join('');
+    const same = text === entry[copy.copy] ? 'same text as the sample' : 'differs from the sample';
+    const { trackElement, modeBefore } = copy.hls;
+    return `Active cue (${cue.constructor.name}, ${cue.startTime.toFixed(3)} to ${cue.endTime.toFixed(3)} s, ${same}): ${spelled}. ` +
+        `Track "${trackElement.label}" (${trackElement.language}, ${trackElement.kind}), mode was "${modeBefore}" before the page set "showing".`;
+}
+
+async function showHls(copy, entry) {
+    const { videoElement, trackElement } = await loadHls(copy);
+    const info = copy.section.querySelector('.cueinfo');
+    info.textContent = '';
+    videoElement.pause();
+    videoElement.currentTime = entry.start + FRAME_AT;
+    await until(() => !videoElement.seeking && videoElement.readyState >= 2, `the ${copy.copy} stream never finished seeking`);
+    try {
+        const cue = await until(() => Array.from(trackElement.activeCues || [])
+            .find(active => Math.abs(active.startTime - entry.start) < 0.05),
+            `cue ${entry.slug} never became active in the ${copy.copy} stream`);
+        info.textContent = describeCue(cue, entry, copy);
+    } catch (error) {
+        info.textContent = `No active cue at ${entry.start} s.`;
+        throw error;
+    }
+}
+
+const SHOW = { custom: showCustom, native: showNative, hls: showHls };
+
+async function init() {
+    const cues = await (await fetch('/sample/cues.json')).json();
+    const copies = [];
+    for (const section of document.querySelectorAll('section[data-copy]')) {
+        copies.push(await loadCopy(section, cues));
+    }
+
+    async function show(path, slug) {
+        const entry = cues.find(c => c.slug === slug);
+        if (!entry || !PATH_NAMES[path]) {
+            throw new Error(`unknown path ${path} or case ${slug}`);
+        }
+
+        document.body.className = `path-${path}`;
+        document.getElementById('title').textContent = `Case ${entry.slug}: ${entry.title}`;
+        document.getElementById('meta').textContent =
+            `${PATH_NAMES[path]}. ${path === 'hls' ? '' : `Jellyfin Web ${JELLYFIN_WEB_COMMIT.slice(0, 8)}. `}${navigator.userAgent}`;
+        for (const copy of copies) {
+            await SHOW[path](copy, entry);
+        }
+
+        await nextFrame();
+        await wait(250);
+        return `${path} ${slug} shown`;
+    }
+
+    return { cases: cues.map(c => c.slug), show };
+}
+
+window.proof = {
+    ready: init(),
+    async show(path, slug) {
+        return (await this.ready).show(path, slug);
+    }
+};
+
+async function stepThrough() {
+    const { cases } = await window.proof.ready;
+    const paths = params.get('step') ? params.get('step').split(',') : Object.keys(PATH_NAMES);
+    const steps = paths.flatMap(path => cases.map(slug => [path, slug]));
+    let index = 0;
+    let showing = Promise.resolve();
+    function go(next) {
+        index = Math.min(Math.max(next, 0), steps.length - 1);
+        showing = showing.then(async () => {
+            await window.proof.show(...steps[index]);
+            document.getElementById('title').textContent =
+                `Step ${index + 1} of ${steps.length}. ` + document.getElementById('title').textContent;
+        }).catch(error => {
+            document.getElementById('title').textContent =
+                `Step ${index + 1} of ${steps.length} failed: ${error.message}`;
+        });
+    }
+    document.addEventListener('keydown', event => {
+        if (event.key === 'ArrowRight' || event.key === ' ') {
+            event.preventDefault();
+            go(index + 1);
+        } else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            go(index - 1);
+        }
+    });
+    go(0);
+}
+
+const params = new URLSearchParams(location.search);
+if (params.has('step')) {
+    stepThrough();
+} else if (params.has('path') && params.has('case')) {
+    window.proof.show(params.get('path'), params.get('case'));
+}
+</script>
+</body>
+</html>
