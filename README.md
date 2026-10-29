@@ -31,4 +31,4 @@ See [docs/development.md](docs/development.md).
 
 ## License
 
-GPL-2.0, the same as Jellyfin. See [LICENSE](LICENSE).
+GPL-2.0. See [LICENSE](LICENSE).
