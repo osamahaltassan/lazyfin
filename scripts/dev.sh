@@ -11,6 +11,8 @@
 #   install   Build Lazyfin, copy it into every server's plugins folder, and restart them.
 #   release   Build the release zip and manifest exactly as CI does, serve them locally,
 #             install Lazyfin through the plugin repository on every server, and check it loaded.
+#   api       Download only Jellyfin.Api.dll from every server build, for the server-build test.
+#             CI runs this. Skips a server whose build is already there.
 #
 # Every server starts with Jellyfin's own ffmpeg, pinned in FFMPEG and shared from ~/lazyfin-dev/ffmpeg.
 # A running server picks up a new ffmpeg on its next restart.
@@ -86,6 +88,19 @@ download() {
     log "Downloading $(server_field "$1" 1)"
     mkdir -p "$dir"
     curl -sSLf "$url" | tar -xJ -C "$dir"
+}
+
+# Unpacks only Jellyfin.Api.dll from the server build, to where a full download puts it.
+download_api() {
+    local dir url
+    dir="$(server_dir "$1")"
+    url="$(server_field "$1" 3)"
+    if [[ -f "$dir/jellyfin/Jellyfin.Api.dll" ]]; then
+        return 0
+    fi
+    log "Downloading Jellyfin.Api.dll of $(server_field "$1" 1)"
+    mkdir -p "$dir"
+    curl -sSLf "$url" | tar -xJ -C "$dir" jellyfin/Jellyfin.Api.dll
 }
 
 ffmpeg_field() { cut -d'|' -f"$1" <<<"$FFMPEG"; }
@@ -316,10 +331,16 @@ cmd_release() {
     done
 }
 
+cmd_api() {
+    for server in "${SERVERS[@]}"; do
+        download_api "$server"
+    done
+}
+
 case "${1:-}" in
-    setup | start | stop | status | install | release) "cmd_$1" ;;
+    setup | start | stop | status | install | release | api) "cmd_$1" ;;
     *)
-        sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac

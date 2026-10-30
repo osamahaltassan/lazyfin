@@ -24,6 +24,7 @@ Lazyfin supports Jellyfin 12.x.
 ## Enhancements
 
 - **RTL fix**: right-to-left subtitle lines, such as Arabic or Hebrew, show their end punctuation at the end of the line, the way mpv shows them.
+- **Unlimited Continue Watching and Next Up**: both rows list everything a viewer started, however long ago, in every client.
 
 ## Development
 
