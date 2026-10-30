@@ -42,6 +42,9 @@ jobs:
       - name: Check dependency age
         run: python3 scripts/check-dependency-age.py
 
+      - name: Download each server build's Jellyfin.Api.dll
+        run: scripts/dev.sh api
+
       - name: Test
         run: dotnet test Lazyfin.slnx --configuration Release
 
