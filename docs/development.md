@@ -4,42 +4,40 @@ How to build, test, and release Lazyfin, and where a new enhancement goes.
 
 ## Tools
 
-- The .NET SDK pinned in `global.json`. Install it with Microsoft's `dotnet-install.sh --version <that version> --install-dir ~/.dotnet`.
-- `uv`, for the release packaging tool `jprm`.
-- Python 3, for the scripts in `scripts/`.
+Code is written on the Mac, and every command below runs in the `lf-dev` VM through `lf-remote`. [agents/running-code.md](agents/running-code.md) covers how, and lists what the VM holds: the .NET SDK pinned in `global.json`, `uv` for the release packaging tool `jprm`, and Python 3 for the scripts in `scripts/`.
 
 ## Build and test
 
 ```bash
-dotnet build Lazyfin.slnx
-dotnet test Lazyfin.slnx
+lf-remote dotnet build Lazyfin.slnx
+lf-remote dotnet test Lazyfin.slnx
 ```
 
 Warnings fail the build. The analyzers, `.editorconfig`, `stylecop.json`, and `BannedSymbols.txt` are the Jellyfin server's own, so code that passes here already follows upstream style.
 
-## Local test servers
+## Test servers
 
-`scripts/dev.sh` runs two Jellyfin servers from `.temp/servers`:
+`scripts/dev.sh` runs two Jellyfin servers in `lf-dev`, from `~/lazyfin-dev/servers`. The Mac's browser opens each one on `lf-dev`'s address at its port:
 
-| Server | URL | Purpose |
+| Server | Port | Purpose |
 | --- | --- | --- |
-| 12.2 | <http://127.0.0.1:8122> | The newest stable release that passes the 7-day rule |
-| 13.0-2026101212 | <http://127.0.0.1:8130> | The upcoming major version |
+| 12.2 | 8122 | The newest stable release that passes the 7-day rule |
+| 13.0-2026101212 | 8130 | The upcoming major version |
 
 Both have the test admin `lazyfin`, password `lazyfin`.
 
 | Command | What it does |
 | --- | --- |
-| `scripts/dev.sh setup` | Downloads both servers and ffmpeg, starts the servers, and finishes their startup wizard. Run it once. |
-| `scripts/dev.sh install` | Builds Lazyfin, installs it on both servers, and restarts them. This is the edit loop. |
-| `scripts/dev.sh release` | Builds the release zip and manifest the way CI does, then installs Lazyfin through a local plugin repository on both servers. |
-| `scripts/dev.sh start`, `stop`, `status` | Controls the servers. |
+| `lf-remote scripts/dev.sh setup` | Downloads both servers and ffmpeg, starts the servers, and finishes their startup wizard. Run it once. |
+| `lf-remote scripts/dev.sh install` | Builds Lazyfin, installs it on both servers, and restarts them. This is the edit loop. |
+| `lf-remote scripts/dev.sh release` | Builds the release zip and manifest the way CI does, then installs Lazyfin through a local plugin repository on both servers. |
+| `lf-remote scripts/dev.sh start`, `stop`, `status` | Controls the servers. `status` prints each server's URL. |
 
-Both servers run Jellyfin's own ffmpeg, the Apple silicon build of `jellyfin-ffmpeg` pinned in `FFMPEG` at the top of `scripts/dev.sh`, so transcoding and burn-in work. The script downloads it once, checks it against its pinned SHA-256 digest, and unpacks it into `.temp/ffmpeg/<version>`, which both servers share. It starts every server with Jellyfin's own `--ffmpeg` startup option pointing there, so each server's Playback settings page shows that path. A server that is already running picks up ffmpeg on its next restart, such as `install`, `release`, or `stop` then `start`.
+Both servers run Jellyfin's own ffmpeg, the Linux x64 build of `jellyfin-ffmpeg` pinned in `FFMPEG` at the top of `scripts/dev.sh`, so transcoding and burn-in work. The script downloads it once, checks it against its pinned SHA-256 digest, and unpacks it into `~/lazyfin-dev/ffmpeg/<version>`, which both servers share. It starts every server with Jellyfin's own `--ffmpeg` startup option pointing there, so each server's Playback settings page shows that path. A server that is already running picks up ffmpeg on its next restart, such as `install`, `release`, or `stop` then `start`.
 
-To test a newer server build, change its line in `SERVERS` at the top of `scripts/dev.sh`, and delete its folder in `.temp/servers`.
+To test a newer server build, change its line in `SERVERS` at the top of `scripts/dev.sh`, then stop the servers and delete that server's folder in `~/lazyfin-dev/servers` in `lf-dev`.
 
-To bump ffmpeg, pick a `jellyfin/jellyfin-ffmpeg` release that is at least 7 days old, and change `FFMPEG` to its version, the URL of its `portable_macarm64-gpl` asset, and the SHA-256 digest GitHub shows for that asset. The new version lands in its own folder on the next start, and you can delete the old one.
+To bump ffmpeg, pick a `jellyfin/jellyfin-ffmpeg` release that is at least 7 days old, and change `FFMPEG` to its version, the URL of its `portable_linux64-gpl` asset, and the SHA-256 digest GitHub shows for that asset. The new version lands in its own folder on the next start, and you can delete the old one.
 
 ## Adding an enhancement
 
