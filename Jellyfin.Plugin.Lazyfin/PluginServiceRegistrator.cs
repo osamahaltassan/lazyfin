@@ -1,5 +1,6 @@
 using Jellyfin.Plugin.Lazyfin.Enhancements.RtlFix;
 using Jellyfin.Plugin.Lazyfin.Enhancements.UnlimitedRows;
+using Jellyfin.Plugin.Lazyfin.Enhancements.WatchedInLatest;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,5 +23,6 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
         serviceCollection.AddRtlFix();
         serviceCollection.AddUnlimitedRows();
+        serviceCollection.AddWatchedInLatest();
     }
 }
