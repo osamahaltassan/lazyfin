@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Local Jellyfin test servers for Lazyfin development.
+# Jellyfin test servers for Lazyfin development, run in the lf-dev VM on Linux x64.
 #
-# Usage: scripts/dev.sh <command>
+# Usage, from a worktree on the Mac: lf-remote scripts/dev.sh <command>
 #
 #   setup     Download the pinned server builds and ffmpeg, start the servers, and finish their
 #             startup wizard with the test admin below. Safe to run again.
@@ -12,10 +12,11 @@
 #   release   Build the release zip and manifest exactly as CI does, serve them locally,
 #             install Lazyfin through the plugin repository on every server, and check it loaded.
 #
-# Every server starts with Jellyfin's own ffmpeg, pinned in FFMPEG and shared from .temp/ffmpeg.
+# Every server starts with Jellyfin's own ffmpeg, pinned in FFMPEG and shared from ~/lazyfin-dev/ffmpeg.
 # A running server picks up a new ffmpeg on its next restart.
 #
-# Everything lives in .temp/servers and .temp/ffmpeg, which git ignores. Delete them to start over.
+# The servers live in ~/lazyfin-dev/servers, outside every worktree, so all worktrees share one pair
+# and `install` puts the calling worktree's build on it. Delete ~/lazyfin-dev to start over.
 # Test admin on every server: user "lazyfin", password "lazyfin".
 #
 # Every build in SERVERS and FFMPEG was released at least 7 days before it was pinned. See AGENTS.md,
@@ -24,18 +25,19 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ROOT="$REPO/.temp/servers"
+STATE="$HOME/lazyfin-dev"
+ROOT="$STATE/servers"
 export PATH="$HOME/.dotnet:$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 # name|port|download URL
 SERVERS=(
-    "12.2|8122|https://repo.jellyfin.org/files/server/macos/stable/v12.2/arm64/jellyfin_12.2-arm64.tar.xz"
-    "13.0-2026101212|8130|https://repo.jellyfin.org/files/server/macos/unstable/2026101212/arm64/jellyfin_2026101212-arm64.tar.xz"
+    "12.2|8122|https://repo.jellyfin.org/files/server/linux/stable/v12.2/amd64/jellyfin_12.2-amd64.tar.xz"
+    "13.0-2026101212|8130|https://repo.jellyfin.org/files/server/linux/unstable/2026101212/amd64/jellyfin_2026101212-amd64.tar.xz"
 )
 
 # version|download URL|SHA-256 digest that GitHub publishes for the asset
-FFMPEG="8.1.3-1|https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz|22445d7299742749ad2eeb9ce87963d50def0357e45b3e6c7b69987c8365dbf6"
+FFMPEG="8.1.3-1|https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.3-1/jellyfin-ffmpeg_8.1.3-1_portable_linux64-gpl.tar.xz|b86dc023c64a5a9a410e6e3a938a970460214fae78f31c1553c9f88f1c289b6a"
 
 ADMIN_USER="lazyfin"
 ADMIN_PASSWORD="lazyfin"
@@ -50,6 +52,8 @@ server_field() { cut -d'|' -f"$2" <<<"$1"; }
 server_dir() { echo "$ROOT/$(server_field "$1" 1)"; }
 
 server_url() { echo "http://127.0.0.1:$(server_field "$1" 2)"; }
+
+browser_url() { echo "http://$(hostname -I | cut -d' ' -f1):$(server_field "$1" 2)"; }
 
 json_field() { python3 -I -c "import json,sys; print(json.load(sys.stdin)$1)"; }
 
@@ -86,7 +90,7 @@ download() {
 
 ffmpeg_field() { cut -d'|' -f"$1" <<<"$FFMPEG"; }
 
-ffmpeg_dir() { echo "$REPO/.temp/ffmpeg/$(ffmpeg_field 1)"; }
+ffmpeg_dir() { echo "$STATE/ffmpeg/$(ffmpeg_field 1)"; }
 
 # Downloads the FFMPEG pin into ffmpeg_dir once. The folder appears only after the digest check,
 # the unpack, and `ffmpeg -version` all pass, so a failed run never leaves a folder that looks complete.
@@ -108,7 +112,7 @@ download_ffmpeg() {
         log "Could not download ffmpeg $version from $url."
         return 1
     fi
-    actual="$(shasum -a 256 "$work/ffmpeg.tar.xz" | cut -d' ' -f1)"
+    actual="$(sha256sum "$work/ffmpeg.tar.xz" | cut -d' ' -f1)"
     if [[ "$actual" != "$digest" ]]; then
         rm -rf "$work"
         log "The ffmpeg $version download has SHA-256 $actual, but FFMPEG pins $digest. Nothing was installed."
@@ -163,10 +167,10 @@ start_server() {
         --cachedir "$dir/cache" \
         --logdir "$dir/log" \
         --webdir "$dir/jellyfin/jellyfin-web" \
-        >"$dir/server.out" 2>&1 &
+        </dev/null >"$dir/server.out" 2>&1 &
     echo $! >"$dir/server.pid"
     wait_until_up "$1"
-    log "Started $(server_field "$1" 1) at $(server_url "$1")"
+    log "Started $(server_field "$1" 1) at $(browser_url "$1")"
 }
 
 stop_server() {
@@ -251,7 +255,7 @@ cmd_stop() {
 cmd_status() {
     for server in "${SERVERS[@]}"; do
         if is_running "$server"; then
-            log "$(server_field "$server" 1): running at $(server_url "$server")"
+            log "$(server_field "$server" 1): running at $(browser_url "$server")"
         else
             log "$(server_field "$server" 1): stopped"
         fi
@@ -315,7 +319,7 @@ cmd_release() {
 case "${1:-}" in
     setup | start | stop | status | install | release) "cmd_$1" ;;
     *)
-        sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
         exit 1
         ;;
 esac
