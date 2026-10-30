@@ -5,7 +5,8 @@ using MediaBrowser.Model.Querying;
 namespace Jellyfin.Plugin.Lazyfin.Enhancements.UnlimitedRows;
 
 /// <summary>
-/// Lifts the limits a client puts on Continue Watching and Next Up, so they list everything a viewer started.
+/// Lifts the limits a client puts on Next Up and on the resume rows, such as Continue Watching, Continue Listening, and
+/// Continue Reading, so they list everything a viewer started.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,7 +18,7 @@ namespace Jellyfin.Plugin.Lazyfin.Enhancements.UnlimitedRows;
 /// item. Without that, a client that pages would show the items after its first page twice.
 /// </para>
 /// </remarks>
-public static class UnlimitedRows
+public static class UnlimitedRowsRules
 {
     /// <summary>
     /// The start index argument of Jellyfin's Next Up and resume actions.
