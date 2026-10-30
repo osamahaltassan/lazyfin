@@ -15,6 +15,8 @@ lf-remote dotnet test Lazyfin.slnx
 
 Warnings fail the build. The analyzers, `.editorconfig`, `stylecop.json`, and `BannedSymbols.txt` are the Jellyfin server's own, so code that passes here already follows upstream style.
 
+The tests read `Jellyfin.Api.dll` from every server build in `SERVERS`, and fail when one is missing. `scripts/dev.sh setup` downloads the builds, and `scripts/dev.sh api` downloads only that file, as CI does.
+
 ## Test servers
 
 `scripts/dev.sh` runs two Jellyfin servers in `lf-dev`, from `~/lazyfin-dev/servers`. The Mac's browser opens each one on `lf-dev`'s address at its port:
@@ -31,11 +33,12 @@ Both have the test admin `lazyfin`, password `lazyfin`.
 | `lf-remote scripts/dev.sh setup` | Downloads both servers and ffmpeg, starts the servers, and finishes their startup wizard. Run it once. |
 | `lf-remote scripts/dev.sh install` | Builds Lazyfin, installs it on both servers, and restarts them. This is the edit loop. |
 | `lf-remote scripts/dev.sh release` | Builds the release zip and manifest the way CI does, then installs Lazyfin through a local plugin repository on both servers. |
+| `lf-remote scripts/dev.sh api` | Downloads only `Jellyfin.Api.dll` from each server build, for the tests. |
 | `lf-remote scripts/dev.sh start`, `stop`, `status` | Controls the servers. `status` prints each server's URL. |
 
 Both servers run Jellyfin's own ffmpeg, the Linux x64 build of `jellyfin-ffmpeg` pinned in `FFMPEG` at the top of `scripts/dev.sh`, so transcoding and burn-in work. The script downloads it once, checks it against its pinned SHA-256 digest, and unpacks it into `~/lazyfin-dev/ffmpeg/<version>`, which both servers share. It starts every server with Jellyfin's own `--ffmpeg` startup option pointing there, so each server's Playback settings page shows that path. A server that is already running picks up ffmpeg on its next restart, such as `install`, `release`, or `stop` then `start`.
 
-To test a newer server build, change its line in `SERVERS` at the top of `scripts/dev.sh`, then stop the servers and delete that server's folder in `~/lazyfin-dev/servers` in `lf-dev`.
+To test a newer server build, change its line in `SERVERS` at the top of `scripts/dev.sh`, then stop the servers and delete that server's folder in `~/lazyfin-dev/servers` in `lf-dev`. Then run the tests, which check every API change against the new build, and recheck in Jellyfin's source that each action a change edits in place still builds a fresh answer per request.
 
 To bump ffmpeg, pick a `jellyfin/jellyfin-ffmpeg` release that is at least 7 days old, and change `FFMPEG` to its version, the URL of its `portable_linux64-gpl` asset, and the SHA-256 digest GitHub shows for that asset. The new version lands in its own folder on the next start, and you can delete the old one.
 
@@ -47,7 +50,16 @@ To bump ffmpeg, pick a `jellyfin/jellyfin-ffmpeg` release that is at least 7 day
 4. Put its tests in `tests/Jellyfin.Plugin.Lazyfin.Tests/Enhancements/<Enhancement>/`.
 5. Add a line for it under **Enhancements** in `README.md`, and a changelog entry.
 
-Each enhancement depends only on Jellyfin and on its own folder. That keeps each one small enough to lift into upstream on its own.
+Each enhancement depends only on Jellyfin, its own folder, and Lazyfin's shared server route in `ServerRoute/`. That keeps each one small enough to lift into upstream on its own.
+
+### Changing the Jellyfin API
+
+An enhancement that changes what a Jellyfin API action receives or answers declares an `ApiChange` and registers it with `services.AddApiChange(...)` from its `Add<Enhancement>()`. One shared MVC filter applies every change, for every client, and keeps Jellyfin's own request or answer whenever a change fails. `UnlimitedRows` is the example.
+
+- Keep the change logic in plain methods over `Jellyfin.Model` types in the enhancement's folder. Only the declaration uses `ServerRoute` types.
+- List every action the change applies to, legacy actions such as `GetResumeItemsLegacy` included, with every argument it reads or writes.
+- Return a new answer, unless Jellyfin's source shows the action builds a fresh answer per request on every supported version. Some actions, such as `GetConfiguration`, answer with the server's live object.
+- Aim a change at some clients only for a stated reason, by exact `Client` name.
 
 ## Dependencies
 

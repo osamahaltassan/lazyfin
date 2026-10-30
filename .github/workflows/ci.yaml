@@ -28,6 +28,14 @@ jobs:
       - name: Build
         run: dotnet build Lazyfin.slnx --configuration Release
 
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/lazyfin-dev/servers
+          key: jellyfin-api-${{ hashFiles('scripts/dev.sh') }}
+
+      - name: Download each server build's Jellyfin.Api.dll
+        run: scripts/dev.sh api
+
       - name: Test
         run: dotnet test Lazyfin.slnx --configuration Release --no-build
 
