@@ -46,6 +46,16 @@ _Avoid_: plugin or web plugin alone, when it means this rather than a Jellyfin s
 The one script Lazyfin adds to Jellyfin Web, which carries the Jellyfin Web plugin of every enhancement.
 _Avoid_: Injector, loader script, custom JavaScript
 
+## Settings
+
+**Viewer setting**:
+A choice an enhancement lets a viewer make that follows them to every device and app they sign in on.
+_Avoid_: User setting, preference, server setting
+
+**Device setting**:
+A choice an enhancement lets a viewer make that stays on the one device and app they made it on, because its right value differs by device.
+_Avoid_: Local setting, app setting
+
 ## Subtitles
 
 **RTL fix**:
