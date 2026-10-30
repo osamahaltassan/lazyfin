@@ -55,9 +55,10 @@ The board is the build queue. The order of open tasks in the `To do` column, top
 
 - A wayfinder map is a parent task, and its tickets are its subtasks.
 - The `Later` column holds tasks the maintainer has set aside on purpose. Each one has a comment saying what it waits for.
-- The maintainer sets the order by dragging cards. The agent moves a card only when the maintainer gives it a place, such as for a new task or a reorder they ask for.
+- The maintainer sets the order by dragging cards. The agent places every task it creates where it belongs in the queue.
+- When one task must come before another, the agent records a `blocks` relation.
 
-Done when the `To do` order matches the maintainer's, and every task set aside sits in `Later` with its reason.
+Done when every blocker sits above the tasks it blocks, and every task set aside sits in `Later` with its reason.
 
 The CLI has no command for a card's place. To set one, read the column top first with `kaneo task list --status to-do --sort position --json`, write the whole column in its new order to a file as `{"projectId": "<LAZ project id>", "tasks": [{"id": "<task id>", "position": 0, "status": "to-do"}, ...]}`, and send it with `kaneo api POST /task/reorder --input <file>`. `kaneo project view LAZ --json` prints the project id.
 
