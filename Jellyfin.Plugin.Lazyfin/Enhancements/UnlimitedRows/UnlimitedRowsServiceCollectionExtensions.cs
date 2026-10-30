@@ -13,7 +13,7 @@ namespace Jellyfin.Plugin.Lazyfin.Enhancements.UnlimitedRows;
 public static class UnlimitedRowsServiceCollectionExtensions
 {
     /// <summary>
-    /// Changes Jellyfin's Next Up and resume actions, legacy ones included, the way <see cref="UnlimitedRows"/> says,
+    /// Changes Jellyfin's Next Up and resume actions, legacy ones included, the way <see cref="UnlimitedRowsRules"/> says,
     /// for every client.
     /// </summary>
     /// <remarks>
@@ -24,16 +24,16 @@ public static class UnlimitedRowsServiceCollectionExtensions
     /// <returns><paramref name="services"/>.</returns>
     public static IServiceCollection AddUnlimitedRows(this IServiceCollection services)
     {
-        var startIndex = ApiArgument.Of<int?>(UnlimitedRows.StartIndex);
-        var limit = ApiArgument.Of<int?>(UnlimitedRows.Limit);
-        var emptyLaterPage = ApiChange.Answer<QueryResult<BaseItemDto>>((answer, _) => UnlimitedRows.EmptyLaterPage(answer));
+        var startIndex = ApiArgument.Of<int?>(UnlimitedRowsRules.StartIndex);
+        var limit = ApiArgument.Of<int?>(UnlimitedRowsRules.Limit);
+        var emptyLaterPage = ApiChange.Answer<QueryResult<BaseItemDto>>((answer, _) => UnlimitedRowsRules.EmptyLaterPage(answer));
 
         return services
             .AddApiChange(new ApiChange(
                 "NextUpUnlimited",
-                [new("TvShows", "GetNextUp", typeof(QueryResult<BaseItemDto>), [startIndex, limit, ApiArgument.Of<DateTime?>(UnlimitedRows.NextUpDateCutoff)])])
+                [new("TvShows", "GetNextUp", typeof(QueryResult<BaseItemDto>), [startIndex, limit, ApiArgument.Of<DateTime?>(UnlimitedRowsRules.NextUpDateCutoff)])])
             {
-                ChangeArguments = (arguments, _) => UnlimitedRows.NextUpArguments(StartIndexOf(arguments)),
+                ChangeArguments = (arguments, _) => UnlimitedRowsRules.NextUpArguments(StartIndexOf(arguments)),
                 ChangeAnswer = emptyLaterPage,
             })
             .AddApiChange(new ApiChange(
@@ -43,11 +43,11 @@ public static class UnlimitedRowsServiceCollectionExtensions
                     new("Items", "GetResumeItemsLegacy", typeof(QueryResult<BaseItemDto>), [startIndex, limit]),
                 ])
             {
-                ChangeArguments = (arguments, _) => UnlimitedRows.ContinueWatchingArguments(StartIndexOf(arguments)),
+                ChangeArguments = (arguments, _) => UnlimitedRowsRules.ContinueWatchingArguments(StartIndexOf(arguments)),
                 ChangeAnswer = emptyLaterPage,
             });
     }
 
     private static int? StartIndexOf(IReadOnlyDictionary<string, object?> arguments)
-        => arguments.TryGetValue(UnlimitedRows.StartIndex, out var value) ? value as int? : null;
+        => arguments.TryGetValue(UnlimitedRowsRules.StartIndex, out var value) ? value as int? : null;
 }

@@ -4,7 +4,7 @@ All notable changes to Lazyfin are recorded here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
-- Continue Watching and Next Up list everything a viewer started, however long ago, in every client. Next Up no longer drops shows the viewer has not touched for a year.
+- Continue Watching, Continue Listening, Continue Reading, and Next Up list everything a viewer started, however long ago, on the home screen and inside each library, in every client. Next Up no longer drops shows the viewer has not touched for a year.
 - New viewers keep watched items in the home screen's Latest rows. Viewers who existed before keep their own choice.
 
 ## 0.1.1 - 2026-10-25

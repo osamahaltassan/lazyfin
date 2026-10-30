@@ -44,7 +44,7 @@ public delegate object AnswerChange(object answer, ApiRequest request);
 /// server's live object, and editing it would change the server's real settings.
 /// </para>
 /// </remarks>
-/// <param name="Name">A short name for logs, such as <c>NextUpNoLimit</c>.</param>
+/// <param name="Name">A short name for logs, such as <c>NextUpUnlimited</c>.</param>
 /// <param name="Actions">The actions this change applies to.</param>
 public sealed record ApiChange(string Name, IReadOnlyList<ApiAction> Actions)
 {

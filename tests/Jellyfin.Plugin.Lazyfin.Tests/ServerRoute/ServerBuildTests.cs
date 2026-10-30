@@ -50,7 +50,7 @@ public partial class ServerBuildTests
     public void MisspelledAction_IsReported(string server)
     {
         var api = ReadApi(server);
-        var misspelled = new ApiChange("Misspelled", [new("TvShows", "GetNextUpp", typeof(QueryResult<BaseItemDto>))]);
+        var misspelled = new ApiChange("Misspelled", [new("TvShows", "GetNextUpp", typeof(QueryResult<BaseItemDto>), [])]);
 
         Assert.Equal(["Misspelled: TvShows.GetNextUpp is missing"], Check(api, misspelled));
     }
