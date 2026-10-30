@@ -1,6 +1,6 @@
 # Lazyfin
 
-Lazyfin is one Jellyfin plugin that fixes Jellyfin's user experience so that nobody has to configure it to get a good result. Admins install it from a Lazyfin plugin repository, and it is written so that any part of it could later move upstream.
+Lazyfin is one Jellyfin plugin that adds a few small changes to how Jellyfin behaves for viewers, with nothing to set up. Admins install it from a Lazyfin plugin repository, and each change is written so it could later be offered upstream.
 
 ## Language
 
