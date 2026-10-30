@@ -28,6 +28,24 @@ _Avoid_: Catalog, store, feed
 The Jellyfin server and Jellyfin Web projects that an enhancement may one day be merged into.
 _Avoid_: Core, mainline
 
+## Reaching clients
+
+**Server route**:
+The way Lazyfin changes what the Jellyfin server receives, sends, and stores, which reaches every client.
+_Avoid_: Server side, backend route, API route
+
+**Jellyfin Web route**:
+The way Lazyfin changes the Jellyfin Web code a viewer's browser or app runs.
+_Avoid_: Client route, web injection
+
+**Jellyfin Web plugin**:
+A piece of code that Jellyfin Web's own plugin system loads into Jellyfin Web. An enhancement that changes Jellyfin Web defines one or more.
+_Avoid_: plugin or web plugin alone, when it means this rather than a Jellyfin server plugin
+
+**Lazyfin script**:
+The one script Lazyfin adds to Jellyfin Web, which carries the Jellyfin Web plugin of every enhancement.
+_Avoid_: Injector, loader script, custom JavaScript
+
 ## Subtitles
 
 **RTL fix**:
