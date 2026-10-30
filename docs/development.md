@@ -54,7 +54,7 @@ Each enhancement depends only on Jellyfin, its own folder, and Lazyfin's shared 
 
 ### Changing the Jellyfin API
 
-An enhancement that changes what a Jellyfin API action receives or answers declares an `ApiChange` and registers it with `services.AddApiChange(...)` from its `Add<Enhancement>()`. One shared MVC filter applies every change, for every client, and keeps Jellyfin's own request or answer whenever a change fails. `UnlimitedRows` is the example.
+An enhancement that changes what a Jellyfin API action receives or answers declares an `ApiChange` and registers it with `services.AddApiChange(...)` from its `Add<Enhancement>()`. One shared MVC filter applies every change, for every client, and keeps Jellyfin's own request or answer whenever a change fails. The `UnlimitedRows` enhancement is the example.
 
 - Keep the change logic in plain methods over `Jellyfin.Model` types in the enhancement's folder. Only the declaration uses `ServerRoute` types.
 - List every action the change applies to, legacy actions such as `GetResumeItemsLegacy` included, with every argument it reads or writes.
