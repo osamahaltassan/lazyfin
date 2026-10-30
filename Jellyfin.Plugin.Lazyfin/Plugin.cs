@@ -34,7 +34,7 @@ public class Plugin : BasePlugin<PluginConfiguration>
     public override string Name => "Lazyfin";
 
     /// <inheritdoc />
-    public override string Description => "Fixes Jellyfin's user experience, so nobody has to configure it to get a good result.";
+    public override string Description => "Adds a few small changes to how Jellyfin behaves for viewers, with nothing to set up.";
 
     /// <inheritdoc />
     public override Guid Id => Guid.Parse(PluginId);

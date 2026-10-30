@@ -4,9 +4,9 @@
 
 # Lazyfin
 
-Lazyfin is one Jellyfin plugin that fixes parts of Jellyfin's user experience. Every enhancement is on as soon as Lazyfin is installed, so viewers get a good result without configuring anything.
+Lazyfin is a Jellyfin plugin that adds a few small changes to how Jellyfin behaves for viewers. Each change is on as soon as Lazyfin is installed, with nothing to set up.
 
-Lazyfin is written so that any enhancement could later move into Jellyfin or Jellyfin Web with little rework.
+Each change is written so it could be offered to Jellyfin or Jellyfin Web later, if the Jellyfin team wants it.
 
 ## Install
 
