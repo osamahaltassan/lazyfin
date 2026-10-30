@@ -1,6 +1,6 @@
 # Lazyfin
 
-Lazyfin is one Jellyfin plugin that fixes Jellyfin's user experience so that nobody has to configure it to get a good result. Admins install it from a Lazyfin plugin repository, and it is written so that any part of it could later move into Jellyfin or Jellyfin Web.
+Lazyfin is one Jellyfin plugin that fixes Jellyfin's user experience so that nobody has to configure it to get a good result. Admins install it from a Lazyfin plugin repository, and it is written so that any part of it could later move upstream.
 
 ## Language
 
@@ -25,7 +25,7 @@ The manifest URL an admin adds under Jellyfin's plugin repositories to install a
 _Avoid_: Catalog, store, feed
 
 **Upstream**:
-The Jellyfin server and Jellyfin Web projects that an enhancement may one day be merged into.
+The official Jellyfin projects that an enhancement may one day be merged into: the Jellyfin server, Jellyfin Web, and the official Jellyfin clients.
 _Avoid_: Core, mainline
 
 ## Reaching clients
